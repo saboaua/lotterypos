@@ -1,6 +1,6 @@
 # Lottery POS for Home Assistant (HACS)
 
-Retailer-facing lottery terminal + back office, modelled on the Pega Pega Lottery POS screen:
+Retailer-facing lottery terminal + back office, Lottery POS screen:
 games bar, draw date, bet types, keypad, ticket list, send/print, replay, cancel, redeem, results and reports.
 
 ## Install
