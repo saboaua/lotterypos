@@ -6,7 +6,7 @@ PANEL_URL = "lottery-pos"
 STATIC_URL = "/lottery_pos_static/lottery-panel.js"
 SIGNAL_UPDATE = f"{DOMAIN}_update"
 PLATFORMS = ["sensor"]
-VERSION = "0.1.0"
+VERSION = "0.3.0"
 
 # draw_time = informational, cutoff = last minute to sell for TODAY's draw (HH:MM local)
 DEFAULT_GAMES = [

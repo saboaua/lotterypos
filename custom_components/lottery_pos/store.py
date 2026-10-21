@@ -34,6 +34,7 @@ class LotteryStore:
                 "tickets": {}, "results": {}, "seq": 0,
             }
         data["currency"] = currency
+        data.setdefault("settings", {"name": "Lottery POS", "logo": ""})
         self.data = data
         self._save()
 
@@ -211,6 +212,18 @@ class LotteryStore:
         return {"sales_today": round(sales, 2), "tickets_today": count, "unpaid_prizes": round(liability, 2)}
 
     # ---------- setup ----------
+    def set_branding(self, name: str, logo: str) -> dict:
+        name = name.strip()[:40]
+        if not name:
+            raise LotteryError("Enter a lottery name")
+        if logo and not (logo.startswith("data:image/") or logo.startswith("/local/")):
+            raise LotteryError("Logo must be an uploaded image or a /local/ path")
+        if len(logo) > 300_000:
+            raise LotteryError("Logo image is too large")
+        self.data["settings"] = {"name": name, "logo": logo}
+        self._save()
+        return self.data["settings"]
+
     def add_retailer(self, name: str, commission: float) -> dict:
         rid = re.sub(r"\W+", "_", name.lower()).strip("_") or secrets.token_hex(3)
         if any(r["id"] == rid for r in self.data["retailers"]):

@@ -28,7 +28,7 @@ def _cmd(name, schema=None, admin=False):
 @_cmd("state")
 def _state(s, m):
     d = s.data
-    return {"games": d["games"], "bet_types": d["bet_types"], "currency": d["currency"],
+    return {"games": d["games"], "bet_types": d["bet_types"], "currency": d["currency"], "settings": d["settings"],
             "retailers": [r for r in d["retailers"] if r.get("active", True)], "summary": s.summary()}
 
 @_cmd("sell", {vol.Required("retailer_id"): str, vol.Required("lines"): [_LINE]})
@@ -67,7 +67,10 @@ def _add_r(s, m): return s.add_retailer(m["name"], m["commission"])
                    vol.Optional("logo", default=""): str}, admin=True)
 def _add_g(s, m): return s.add_game(m["name"], m["color"], m["draw_time"], m["cutoff"], m["logo"])
 
-COMMANDS = [_state, _sell, _ticket, _last, _cancel, _redeem, _draws, _report, _results, _add_r, _add_g]
+@_cmd("set_branding", {vol.Required("name"): str, vol.Optional("logo", default=""): str}, admin=True)
+def _brand(s, m): return s.set_branding(m["name"], m["logo"])
+
+COMMANDS = [_brand, _state, _sell, _ticket, _last, _cancel, _redeem, _draws, _report, _results, _add_r, _add_g]
 
 
 def async_register(hass):

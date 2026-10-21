@@ -1,6 +1,6 @@
 # Lottery POS for Home Assistant (HACS)
 
-Retailer-facing lottery terminal + back office, Lottery POS screen:
+Retailer-facing lottery terminal + back office for number games:
 games bar, draw date, bet types, keypad, ticket list, send/print, replay, cancel, redeem, results and reports.
 
 ## Install
@@ -14,8 +14,11 @@ Pick game(s) (several can be selected at once) → draw date → bet type → ty
 Physical keyboard works too (digits, Backspace, Tab = switch field, Enter = add).
 Scanner: the scan box accepts the barcode. Winning ticket → asks to pay; otherwise its lines are loaded for replay. Buttons: Replay last, Último ticket, Copia number, Cancel, Redeem, Print resultado, Print report, Quick pick.
 
-## Back office tab
-Enter results (1st/2nd/3rd, 4 digits) → tickets settle automatically. Settlement report per retailer (sales, commission, prizes, net). Add retailers (commission %) and games.
+## Sidebar menu & back office
+The panel has an icon menu on the left: **Sell**, and (for Home Assistant admin users only) **Results**, **Reports** and **Setup**. Retailers using a non-admin HA user only see Sell.
+**Setup → Branding**: set your lottery name and upload your logo (resized automatically); both show in the menu, top bar and on receipts. Setup also adds retailers and games (with optional game logo upload).
+
+Results tab: enter results (1st/2nd/3rd, 4 digits) → tickets settle automatically. Settlement report per retailer (sales, commission, prizes, net). Add retailers (commission %) and games.
 
 ## Bet types (defaults – EDIT in `const.py` to your real rules/payouts)
 | Bet | Digits | Wins when | Payout x |
