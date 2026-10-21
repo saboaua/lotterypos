@@ -1,0 +1,1 @@
+{"config": {"step": {"user": {"title": "Lottery POS", "description": "Set up the lottery point-of-sale system.", "data": {"currency": "Currency code"}}}, "abort": {"single_instance_allowed": "Already configured."}}}

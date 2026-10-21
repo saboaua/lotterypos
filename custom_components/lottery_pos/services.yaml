@@ -1,0 +1,22 @@
+set_results:
+  fields:
+    game: {required: true, example: diario, selector: {text: {}}}
+    date: {required: true, example: "2026-10-21", selector: {text: {}}}
+    numbers: {required: true, example: '["4821","0377","9150"]', selector: {object: {}}}
+cancel_ticket:
+  fields:
+    ticket_id: {required: true, selector: {text: {}}}
+redeem_ticket:
+  fields:
+    ticket_id: {required: true, selector: {text: {}}}
+add_retailer:
+  fields:
+    name: {required: true, selector: {text: {}}}
+    commission: {required: true, example: 10, selector: {number: {min: 0, max: 100}}}
+add_game:
+  fields:
+    name: {required: true, selector: {text: {}}}
+    color: {selector: {text: {}}}
+    draw_time: {example: "13:00", selector: {text: {}}}
+    cutoff: {example: "12:45", selector: {text: {}}}
+    logo: {example: /local/lottery/diario.png, selector: {text: {}}}

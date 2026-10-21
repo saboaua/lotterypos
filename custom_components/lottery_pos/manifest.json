@@ -1,0 +1,13 @@
+{
+  "domain": "lottery_pos",
+  "name": "Lottery POS",
+  "codeowners": [],
+  "config_flow": true,
+  "single_config_entry": true,
+  "dependencies": ["http", "frontend", "panel_custom", "websocket_api"],
+  "documentation": "https://github.com/your-user/lottery_pos",
+  "issue_tracker": "https://github.com/your-user/lottery_pos/issues",
+  "integration_type": "service",
+  "iot_class": "local_push",
+  "version": "0.1.0"
+}
