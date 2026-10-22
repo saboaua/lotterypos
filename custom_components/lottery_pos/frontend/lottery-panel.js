@@ -47,7 +47,7 @@ button{border:0;border-radius:14px;padding:10px 14px;background:var(--key);font-
 .rhead{display:flex;justify-content:space-between;align-items:center}.rhead h3{margin:0;font-size:17px}.badge{background:var(--pri);color:#fff;border-radius:999px;padding:2px 10px;font-size:12px;font-weight:700}
 .rsub{font-size:12px;color:var(--mut);margin:2px 0 8px}
 #lines{flex:1;overflow:auto;background:var(--key);border-radius:16px;padding:6px 8px;margin-bottom:12px}
-.ln{display:grid;grid-template-columns:8px auto 1fr auto auto;gap:10px;align-items:center;padding:10px 4px;border-bottom:1px dashed var(--line);font-size:13px;cursor:pointer;animation:pop .2s}
+.ln{display:grid;grid-template-columns:8px auto 1fr auto auto auto;gap:10px;align-items:center;padding:10px 4px;border-bottom:1px dashed var(--line);font-size:13px;cursor:pointer;animation:pop .2s}
 @keyframes pop{from{opacity:0;transform:translateY(-6px)}}
 .ln i{width:8px;height:34px;border-radius:4px}.ln b{font-size:20px;letter-spacing:2px}.ln small{display:block;color:var(--mut)}.ln em{font-style:normal;font-weight:700}
 .ln button{padding:4px 9px;background:#e11d4822;color:var(--bad);border-radius:10px}
@@ -76,6 +76,9 @@ table{width:100%;border-collapse:collapse;font-size:13px}td,th{padding:9px 6px;b
 .gcard label,.office label{font-size:12px;color:var(--mut);display:flex;gap:4px;align-items:center}.chip{background:var(--key);border-radius:999px;padding:4px 10px}
 .ghost{background:var(--key)!important;color:var(--ink)!important}.dng{color:var(--bad)!important}
 .top .ticker{flex:1;margin:0;height:44px;min-width:180px}.top .tk{line-height:44px;font-size:22px}
+.ln .ed{background:#4f46e522;color:var(--pri)}.ln.editing{background:#4f46e51a;border-radius:10px;outline:2px solid var(--pri)}
+.add.upd{background:linear-gradient(135deg,#4f46e5,#7c3aed);box-shadow:0 8px 20px #4f46e555}
+.editbar{grid-column:1/-1;background:#4f46e51a;color:var(--pri);border-radius:12px;padding:8px 12px;font-weight:600;font-size:13px}
 @media(max-width:900px){.top .ticker{order:10;flex-basis:100%}.main{grid-template-columns:1fr}.kpi{display:none}.acts{grid-template-columns:repeat(4,1fr)}}
 @media(max-width:620px){.shell{flex-direction:column-reverse}.nav{width:100%;flex-direction:row;justify-content:space-around;padding:6px}.nav .logo{display:none}.nav button{width:auto;flex:1}#scan{width:100%}}
 `;
@@ -138,11 +141,11 @@ class LotteryPosPanel extends HTMLElement{
     return `<div class="main"><section class="left card">
     <div class="games">${games}</div>
     <div class="ctl"><input type="date" id="date" value="${s.date}" min="${today()}"><div class="bts">${ok.map(b=>`<button class="bt ${b.key===s.bt?"on":""}" data-a="bt" data-v="${b.key}">${b.label}</button>`).join("")}</div></div>
-    <div class="entry"><div id="num" class="disp" data-a="field" data-v="num"></div><div id="amt" class="disp" data-a="field" data-v="amt"></div><button class="add" data-a="add">＋ Add to ticket</button></div>
+    <div class="entry"><div id="num" class="disp" data-a="field" data-v="num"></div><div id="amt" class="disp" data-a="field" data-v="amt"></div>${s.editIdx!=null?`<div class="editbar">✎ Editing play ${s.editIdx+1} — type the new number / amount, then press Update</div><button class="add upd" data-a="add">✔ Update play</button><button class="cancel" data-a="canceledit" style="grid-column:1/-1">Cancel edit</button>`:`<button class="add" data-a="add">＋ Add to ticket</button>`}</div>
     <div class="pads"><div class="pad">${[1,2,3,4,5,6,7,8,9,"CLR",0,"DEL"].map(k=>`<button data-a="key" data-v="${k}">${k}</button>`).join("")}</div>
       <div class="pre">${PRESETS.map(p=>`<button data-a="preset" data-v="${p}">${p}</button>`).join("")}</div></div>
     <div class="acts">${acts.map(a=>`<button data-a="${a[0]}"><ha-icon icon="${a[1]}"></ha-icon>${a[2]}</button>`).join("")}</div>
-  </section><section class="right card"><div class="rhead"><h3>Current ticket</h3><span class="badge" id="cnt">0</span></div><div class="rsub">${s.sel.length} game(s) · tap a play to edit</div>
+  </section><section class="right card"><div class="rhead"><h3>Current ticket</h3><span class="badge" id="cnt">0</span></div><div class="rsub">${s.sel.length} game(s) · tap ✎ to edit a play</div>
     <div id="lines"></div><div class="foot"><div><small>Total</small><div class="tot" id="tot"></div></div><button class="send" data-a="send">Send &amp; Print ▶</button></div></section></div>`}
 
   resultsHTML(){const d=this.s.data;return `<div class="card"><h3>Enter draw results</h3><div class="row"><select id="rg">${d.all_games.map(g=>`<option value="${g.id}">${g.name}</option>`).join("")}</select><input type="date" id="rd" value="${today()}"></div>
@@ -176,12 +179,12 @@ class LotteryPosPanel extends HTMLElement{
     q("#amt").innerHTML=`<small>Amount ${cur}</small><span class="amtv">${s.amt||"0"}</span>`;
     q("#num").classList.toggle("act",s.field==="num");q("#amt").classList.toggle("act",s.field==="amt");
     const col=k=>s.data.all_games.find(g=>g.id===k)?.color||"#64748b";
-    q("#lines").innerHTML=s.lines.map((l,i)=>`<div class="ln" data-a="edit" data-i="${i}"><i style="background:${col(l.game)}"></i><b>${l.number}</b><span>${this.btl(l.bet_type)}<small>${this.gn(l.game)} · ${l.date.slice(5)}</small></span><em>${fmt(l.amount)}</em><button data-a="del" data-i="${i}">✕</button></div>`).join("")||`<div class="empty">🎟️<br>No plays yet</div>`;
+    q("#lines").innerHTML=s.lines.map((l,i)=>`<div class="ln ${s.editIdx===i?"editing":""}" data-a="edit" data-i="${i}"><i style="background:${col(l.game)}"></i><b>${l.number}</b><span>${this.btl(l.bet_type)}<small>${this.gn(l.game)} · ${l.date.slice(5)}</small></span><em>${fmt(l.amount)}</em><button class="ed" data-a="edit" data-i="${i}" title="Edit">✎</button><button data-a="del" data-i="${i}" title="Remove">✕</button></div>`).join("")||`<div class="empty">🎟️<br>No plays yet</div>`;
     q("#cnt").textContent=s.lines.length;q("#tot").textContent=`${cur} ${fmt(s.lines.reduce((a,l)=>a+l.amount,0))}`}
 
   onKey(e){const s=this.s;if(!s.data||s.tab!=="sell"||e.composedPath()[0]?.tagName==="INPUT"||e.composedPath()[0]?.tagName==="SELECT")return;
     if(/^\d$/.test(e.key))this.key(e.key);else if(e.key==="Backspace")this.key("DEL");else if(e.key==="Enter"){e.preventDefault();this.add()}else if(e.key==="Tab"){e.preventDefault();s.field=s.field==="num"?"amt":"num";this.paint()}}
-  key(k){const s=this.s,f=s.field,bt=this.bt();if(!bt)return;
+  key(k){const s=this.s,f=s.field,bt=this.bt();if(!bt)return;if(s.fresh?.[f]){s.fresh[f]=false;if(k!=="CLR"&&k!=="DEL")s[f]=""}
     if(k==="CLR")s[f]="";else if(k==="DEL")s[f]=s[f].slice(0,-1);
     else if(f==="num"){if(s.num.length<bt.digits)s.num+=k;if(s.num.length===bt.digits)s.field="amt"}
     else if(s.amt.length<7)s.amt=(s.amt==="0"?"":s.amt)+k;
@@ -189,6 +192,7 @@ class LotteryPosPanel extends HTMLElement{
   add(){const s=this.s,bt=this.bt(),amt=parseFloat(s.amt);if(!bt)return this.toast("No bet type available",1);
     if(s.num.length!==bt.digits)return this.toast(`${bt.label} needs ${bt.digits} digits`,1);
     if(!(amt>0))return this.toast("Enter an amount",1);
+    if(s.editIdx!=null){s.lines[s.editIdx]={game:s.sel[0],bet_type:bt.key,number:s.num,amount:amt,date:s.date};s.editIdx=null;s.fresh=null;s.num="";s.field="num";this.toast("Play updated");return this.render()}
     for(const g of s.sel)s.lines.push({game:g,bet_type:bt.key,number:s.num,amount:amt,date:s.date});
     s.num="";s.field="num";this.paint()}
 
@@ -200,16 +204,17 @@ class LotteryPosPanel extends HTMLElement{
       case "bt":s.bt=ds.v;s.num=s.num.slice(0,this.bt().digits);s.field="num";this.render();break;
       case "field":s.field=ds.v;this.paint();break;
       case "key":this.key(ds.v);break;
-      case "preset":s.amt=ds.v;s.field="num";this.paint();break;
+      case "preset":s.amt=ds.v;if(s.fresh)s.fresh.amt=false;s.field="num";this.paint();break;
       case "add":this.add();break;
       case "quick":{const n=this.bt().digits;s.num=Array.from({length:n},()=>Math.floor(Math.random()*10)).join("");s.field="amt";this.paint();break}
-      case "clear":s.lines=[];this.paint();break;
-      case "del":s.lines.splice(+ds.i,1);this.paint();break;
-      case "edit":{const l=s.lines.splice(+ds.i,1)[0];if(!l)break;s.sel=[l.game];s.bt=l.bet_type;s.num=l.number;s.amt=String(l.amount);s.date=l.date;s.field="num";this.render();break}
+      case "clear":s.lines=[];s.editIdx=null;s.fresh=null;this.render();break;
+      case "del":{const i=+ds.i;s.lines.splice(i,1);if(s.editIdx===i){s.editIdx=null;s.fresh=null;s.num=""}else if(s.editIdx>i)s.editIdx--;this.render();break}
+      case "edit":{const l=s.lines[+ds.i];if(!l)break;s.editIdx=+ds.i;s.sel=[l.game];s.bt=l.bet_type;s.num=l.number;s.amt=String(l.amount);s.date=l.date;s.field="num";s.fresh={num:true,amt:true};this.render();break}
+      case "canceledit":s.editIdx=null;s.fresh=null;s.num="";s.amt="";s.field="num";this.render();break;
       case "copy":{const l=s.lines[s.lines.length-1];if(l){s.num=l.number;s.field="amt";this.paint()}break}
       case "send":{if(!s.lines.length)return this.toast("Ticket is empty",1);
         const t=await this.call("sell",{retailer_id:s.retailer,lines:s.lines});if(!t)break;
-        s.lines=[];s.data=await this.ws("state");this.print(this.receipt(t,"TICKET"));this.toast(`Sold ${t.id}`);this.render();break}
+        s.lines=[];s.editIdx=null;s.fresh=null;s.data=await this.ws("state");this.print(this.receipt(t,"TICKET"));this.toast(`Sold ${t.id}`);this.render();break}
       case "last":{const t=await this.call("last",{retailer_id:s.retailer});if(t)this.print(this.receipt(t,"REPRINT"));break}
       case "replay":{const t=await this.call("last",{retailer_id:s.retailer});if(t)this.load(t);break}
       case "cancel":{const id=await this.modal({title:"Cancel ticket",input:"Scan or type ticket number",ok:"Cancel ticket"});if(!id)break;const t=await this.call("cancel",{ticket_id:id});if(t){this.print(this.receipt(t,"CANCELLATION RECEIPT"));this.toast("Ticket cancelled")}break}
@@ -240,7 +245,7 @@ class LotteryPosPanel extends HTMLElement{
     else if(t.status==="cancelled")this.toast("Ticket was cancelled",1);
     else if(t.status==="lost"){this.load(t);this.toast("Not a winner - lines loaded to replay")}
     else{this.load(t);this.toast("Draw pending - lines loaded to replay")}}
-  load(t){const s=this.s;s.tab="sell";s.lines=t.lines.map(l=>({game:l.game,bet_type:l.bet_type,number:l.number,amount:l.amount,date:l.date<today()?s.date:l.date}));this.render();this.toast(`Replay: ${s.lines.length} line(s) loaded`)}
+  load(t){const s=this.s;s.tab="sell";s.editIdx=null;s.lines=t.lines.map(l=>({game:l.game,bet_type:l.bet_type,number:l.number,amount:l.amount,date:l.date<today()?s.date:l.date}));this.render();this.toast(`Replay: ${s.lines.length} line(s) loaded`)}
 
   receipt(t,title){const c=this.s.data.currency,row=l=>`<div style="display:flex;justify-content:space-between"><span>${this.gn(l.game)} ${l.date.slice(5)}</span><span>${l.number} ${this.btl(l.bet_type)}</span><b>${fmt(l.amount)}</b></div>`;
     return `<html><body style="font:12px monospace;width:72mm;margin:0 auto">${this.s.data.settings.logo?`<div style="text-align:center"><img src="${this.s.data.settings.logo}" style="max-height:50px"></div>`:""}<div style="text-align:center;font-weight:bold">${esc(this.s.data.settings.name)}</div><h3 style="text-align:center;margin:4px">${title}</h3><div>${t.retailer_name}<br>${t.created.replace("T"," ").slice(0,16)}</div><hr>${t.lines.map(row).join("")}<hr><div style="display:flex;justify-content:space-between"><b>TOTAL ${c}</b><b>${fmt(t.total)}</b></div><div style="margin-top:8px">${barcode(t.id)}</div><div style="text-align:center">${t.id}</div></body></html>`}
