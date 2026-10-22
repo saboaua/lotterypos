@@ -59,6 +59,12 @@ class LotteryStore:
             p.setdefault("label", "Qualified for promotion")
             p.setdefault("instruction", "Visit www.shocolottery.com and check if you have won")
             p.setdefault("url", "https://www.shocolottery.com")
+            p.setdefault("start_at", "")
+            p.setdefault("end_at", "")
+            p.setdefault("prize", 0.0)
+            # ensure id is always a string (legacy numeric ids)
+            if not isinstance(p.get("id"), str):
+                p["id"] = str(p["id"])
         self.data = data
         self._save()
 
@@ -152,10 +158,30 @@ class LotteryStore:
         Legacy min_lines is treated as min_plays.
         """
         awarded = []
+        now = dt_util.now()
+        now_iso = now.isoformat(timespec="minutes")
+        today = now.date().isoformat()
         for p in self.data.get("promotions", []):
             if not p.get("enabled", True):
                 continue
             try:
+                # Schedule window: empty = always; date-only or datetime
+                sa = (p.get("start_at") or "").strip()
+                ea = (p.get("end_at") or "").strip()
+                if sa:
+                    if "T" in sa:
+                        if now_iso < sa:
+                            continue
+                    else:
+                        if today < sa:
+                            continue
+                if ea:
+                    if "T" in ea:
+                        if now_iso > ea:
+                            continue
+                    else:
+                        if today > ea:
+                            continue
                 scope = set(p.get("games") or [])
                 matched = [l for l in lines if not scope or l["game"] in scope]
                 if not matched:
@@ -176,13 +202,15 @@ class LotteryStore:
                     continue
                 digits = max(4, min(10, int(p.get("code_digits", 6))))
                 code = f"{secrets.randbelow(10 ** digits):0{digits}d}"
+                prize = float(p.get("prize") or 0)
                 awarded.append({
-                    "id": p["id"],
+                    "id": str(p["id"]),
                     "name": p.get("name", "Promotion"),
                     "code": code,
                     "label": p.get("label", "Qualified for promotion"),
                     "instruction": p.get("instruction", "Visit www.shocolottery.com and check if you have won"),
                     "url": p.get("url", "https://www.shocolottery.com"),
+                    "prize": prize,
                 })
             except (TypeError, ValueError, KeyError):
                 continue
@@ -449,6 +477,40 @@ class LotteryStore:
             out["url"] = str(f.get("url", out.get("url", "https://www.shocolottery.com")))[:120]
         if "enabled" in f or existing is None:
             out["enabled"] = bool(f.get("enabled", out.get("enabled", True)))
+        if "start_at" in f or existing is None:
+            sa = str(f.get("start_at", out.get("start_at", "")) or "").strip()
+            if sa:
+                # Accept "YYYY-MM-DD" or "YYYY-MM-DDTHH:MM"
+                try:
+                    if "T" in sa:
+                        dt_util.parse_datetime(sa)
+                    else:
+                        _date.fromisoformat(sa)
+                except (TypeError, ValueError) as err:
+                    raise LotteryError("Invalid start date/time") from err
+            out["start_at"] = sa
+        if "end_at" in f or existing is None:
+            ea = str(f.get("end_at", out.get("end_at", "")) or "").strip()
+            if ea:
+                try:
+                    if "T" in ea:
+                        dt_util.parse_datetime(ea)
+                    else:
+                        _date.fromisoformat(ea)
+                except (TypeError, ValueError) as err:
+                    raise LotteryError("Invalid end date/time") from err
+            out["end_at"] = ea
+        sa, ea = out.get("start_at") or "", out.get("end_at") or ""
+        if sa and ea and sa > ea:
+            raise LotteryError("Start must be before end")
+        if "prize" in f or existing is None:
+            try:
+                prize = float(f.get("prize", out.get("prize", 0)))
+            except (TypeError, ValueError) as err:
+                raise LotteryError("Invalid prize amount") from err
+            if prize < 0 or prize > 1_000_000:
+                raise LotteryError("Prize must be between 0 and 1000000")
+            out["prize"] = round(prize, 2)
         return out
 
     def add_promotion(self, fields: dict) -> dict:

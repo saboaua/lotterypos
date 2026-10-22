@@ -55,7 +55,12 @@ automation:
         data: {message: "Winner {{ trigger.event.data.ticket_id }} pays {{ trigger.event.data.prize }}"}
 ```
 
-## Promotions (v0.7.1+)
+## Promotions (v0.7.2+)
+
+- **Schedule:** optional start/end (`datetime-local`) — leave empty for always-on.
+- **Prize:** amount shown when a player checks their promo code on the website.
+- **Triggers:** min plays, min distinct games, or min purchase amount; optional game scope.
+
 Enable a promotion in **Back office → Promotions**.
 
 1. **Games** – leave all unchecked to count the whole ticket, or tick specific games so only those lines count.
@@ -67,5 +72,5 @@ Enable a promotion in **Back office → Promotions**.
 
 On **Send & Print**, qualifying tickets get the promo block under the plays. Codes are unique per ticket and stored on the ticket record. A bad promotion definition never blocks a sale.
 
-## Known limits (v0.7.1)
+## Known limits (v0.7.2)
 Cut-off uses HA local time. A ticket becomes payable once all its draws are settled. Receipts print via the browser print dialog (use kiosk-printing for thermal printers). Data stored in `.storage/lottery_pos.data`; back it up. Promotion win checking is external (your website); this POS only issues the code on the ticket.

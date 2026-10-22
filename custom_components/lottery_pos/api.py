@@ -77,15 +77,16 @@ def _brand(s, m): return s.set_branding(m["name"], m["logo"])
                      vol.Required("color"): str}, admin=True)
 def _ticker(s, m): return s.set_ticker(m["text"], m["enabled"], m["speed"], m["color"])
 
-@_cmd("update_game", {vol.Required("id"): str, vol.Optional("name"): str, vol.Optional("color"): str,
+# NOTE: never use schema key "id" — it collides with the WebSocket message id (int).
+@_cmd("update_game", {vol.Required("game_id"): str, vol.Optional("name"): str, vol.Optional("color"): str,
                       vol.Optional("draw_time"): str, vol.Optional("open_time"): str, vol.Optional("cutoff"): str,
                       vol.Optional("enabled"): bool, vol.Optional("bet_types"): [str], vol.Optional("logo"): str,
                       vol.Optional("draw_days"): [vol.All(int, vol.Range(min=0, max=6))]}, admin=True)
-def _upd_g(s, m): return s.update_game(m["id"], {k: v for k, v in m.items() if k not in ("id", "type")})
+def _upd_g(s, m): return s.update_game(m["game_id"], {k: v for k, v in m.items() if k not in ("game_id", "type")})
 
-@_cmd("delete_game", {vol.Required("id"): str}, admin=True)
+@_cmd("delete_game", {vol.Required("game_id"): str}, admin=True)
 def _del_g(s, m):
-    s.delete_game(m["id"])
+    s.delete_game(m["game_id"])
     return {}
 
 @_cmd("update_bet_type", {vol.Required("key"): str, vol.Required("label"): str,
@@ -95,9 +96,9 @@ def _upd_b(s, m): return s.update_bet_type(m["key"], m["label"], m["multiplier"]
 @_cmd("set_ticket_design", {vol.Required("design"): dict}, admin=True)
 def _design(s, m): return s.set_ticket_design(m["design"])
 
-@_cmd("update_retailer", {vol.Required("id"): str, vol.Required("name"): str, vol.Required("commission"): vol.Coerce(float),
-                          vol.Required("active"): bool}, admin=True)
-def _upd_r(s, m): return s.update_retailer(m["id"], m["name"], m["commission"], m["active"])
+@_cmd("update_retailer", {vol.Required("retailer_id"): str, vol.Required("name"): str,
+                          vol.Required("commission"): vol.Coerce(float), vol.Required("active"): bool}, admin=True)
+def _upd_r(s, m): return s.update_retailer(m["retailer_id"], m["name"], m["commission"], m["active"])
 
 @_cmd("results_summary", {vol.Required("date_from"): str, vol.Required("date_to"): str}, admin=True)
 def _rsum(s, m): return s.results_summary(m["date_from"], m["date_to"])
@@ -112,24 +113,30 @@ def _rsum(s, m): return s.results_summary(m["date_from"], m["date_to"])
     vol.Optional("instruction", default="Visit www.shocolottery.com and check if you have won"): str,
     vol.Optional("url", default="https://www.shocolottery.com"): str,
     vol.Optional("enabled", default=True): bool,
+    vol.Optional("start_at", default=""): str,
+    vol.Optional("end_at", default=""): str,
+    vol.Optional("prize", default=0): vol.Coerce(float),
 }, admin=True)
 def _add_p(s, m):
     return s.add_promotion(m)
 
 @_cmd("update_promotion", {
-    vol.Required("id"): str,
+    vol.Required("promotion_id"): str,
     vol.Optional("name"): str, vol.Optional("trigger"): str,
     vol.Optional("trigger_value"): vol.Coerce(float), vol.Optional("code_digits"): vol.Coerce(int),
     vol.Optional("games"): [str],
     vol.Optional("label"): str, vol.Optional("instruction"): str, vol.Optional("url"): str,
     vol.Optional("enabled"): bool,
+    vol.Optional("start_at"): str,
+    vol.Optional("end_at"): str,
+    vol.Optional("prize"): vol.Coerce(float),
 }, admin=True)
 def _upd_p(s, m):
-    return s.update_promotion(m["id"], {k: v for k, v in m.items() if k not in ("id", "type")})
+    return s.update_promotion(m["promotion_id"], {k: v for k, v in m.items() if k not in ("promotion_id", "type")})
 
-@_cmd("delete_promotion", {vol.Required("id"): str}, admin=True)
+@_cmd("delete_promotion", {vol.Required("promotion_id"): str}, admin=True)
 def _del_p(s, m):
-    s.delete_promotion(m["id"])
+    s.delete_promotion(m["promotion_id"])
     return {}
 
 COMMANDS = [

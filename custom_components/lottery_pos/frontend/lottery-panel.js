@@ -155,8 +155,13 @@ class LotteryPosPanel extends HTMLElement{
   set hass(h){const first=!this._hass;this._hass=h;if(first)this.init()}
   set narrow(v){}set panel(v){}set route(v){}
   ws(type,extra={}){return this._hass.callWS({type:"lottery_pos/"+type,...extra})}
-  async init(){const s=this.s;try{s.dark=localStorage.getItem("lottery_pos_dark")==="1"}catch(e){}s.data=await this.ws("state");this._tm=setInterval(()=>this.tick(),30000);s.sel=[s.data.games[0]?.id];s.bt=s.data.bet_types[0]?.key;s.retailer=s.data.retailers[0]?.id;
-    this.shadowRoot.addEventListener("click",e=>{const el=e.target.closest("[data-a]");if(el)this.act(el.dataset.a,el.dataset)});this.render()}
+  async init(){const s=this.s;try{s.dark=localStorage.getItem("lottery_pos_dark")==="1"}catch(e){}
+    this._posTerminal=location.hash.includes("pos-terminal");
+    if(this._posTerminal){s.tab="sell";document.title=(document.title||"Lottery POS")+" — Terminal"}
+    s.data=await this.ws("state");this._tm=setInterval(()=>this.tick(),30000);s.sel=[s.data.games[0]?.id];s.bt=s.data.bet_types[0]?.key;s.retailer=s.data.retailers[0]?.id;
+    this.shadowRoot.addEventListener("click",e=>{const el=e.target.closest("[data-a]");if(el)this.act(el.dataset.a,el.dataset)});
+    this.render();
+    if(this._posTerminal){try{await this.requestFullscreen?.()||this.shadowRoot.host?.requestFullscreen?.()}catch(e){}}}
   bt(){return this.s.data.all_bet_types.find(b=>b.key===this.s.bt)}
   allowedBTs(){const s=this.s,d=s.data,sel=s.sel.map(id=>d.all_games.find(g=>g.id===id)).filter(Boolean);return d.bet_types.filter(b=>sel.every(g=>!g.bet_types?.length||g.bet_types.includes(b.key)))}
   btl(k){return this.s.data.all_bet_types.find(b=>b.key===k)?.label||k}
@@ -173,7 +178,9 @@ class LotteryPosPanel extends HTMLElement{
   shrink(file,max=240){return new Promise((res,rej)=>{const img=new Image(),u=URL.createObjectURL(file);img.onload=()=>{const k=Math.min(1,max/Math.max(img.width,img.height)),c=document.createElement("canvas");c.width=Math.round(img.width*k);c.height=Math.round(img.height*k);c.getContext("2d").drawImage(img,0,0,c.width,c.height);URL.revokeObjectURL(u);res(c.toDataURL("image/png"))};img.onerror=()=>rej(new Error("Not an image"));img.src=u})}
   render(){const s=this.s;if(!s.data)return;this.classList.toggle("dark",!!s.dark);const d=s.data,st=d.settings,admin=!!this._hass.user?.is_admin;
     if(!admin&&s.tab!=="sell")s.tab="sell";
-    const items=[["sell","mdi:cash-register","Sell",1],["office","mdi:cog","Back office",admin]];
+    const posOnly=!!this._posTerminal;
+    if(posOnly)s.tab="sell";
+    const items=[["sell","mdi:cash-register","Sell",1],["office","mdi:cog","Back office",admin&&!posOnly]];
     const nav=items.filter(i=>i[3]).map(i=>`<button class="${s.tab===i[0]?"on":""}" data-a="tab" data-v="${i[0]}"><ha-icon icon="${i[1]}"></ha-icon>${i[2]}</button>`).join("");
     const body=s.tab==="sell"?this.sellHTML():`${this.subTabs()}<div class="office">${this.officeBody()}</div>`;
     this.shadowRoot.innerHTML=`<style>${CSS}</style><div class="shell"><nav class="nav"><div class="logo">${st.logo?`<img src="${st.logo}">`:esc((st.name||"L").slice(0,2).toUpperCase())}</div>${nav}</nav><div class="content"><div class="top">
@@ -260,7 +267,7 @@ class LotteryPosPanel extends HTMLElement{
       const valLabel=trig==="min_amount"?`${cur} ${Number(p.trigger_value).toFixed(2)}`:p.trigger_value;
       return `<div class="promo-card" data-pid="${esc(p.id)}">
       <h4><ha-icon icon="mdi:gift-outline"></ha-icon> ${esc(p.name)} ${p.enabled!==false?`<span class="st paid">ON</span>`:`<span class="st unpaid">OFF</span>`}</h4>
-      <div class="meta">${trigLabel[trig]||trig}: <b>${valLabel}</b> · scope: ${esc(scopeTxt(p))} · ${p.code_digits||6}-digit code</div>
+      <div class="meta">${trigLabel[trig]||trig}: <b>${valLabel}</b> · scope: ${esc(scopeTxt(p))} · ${p.code_digits||6}-digit code${Number(p.prize)>0?` · prize <b>${cur} ${Number(p.prize).toFixed(2)}</b>`:""}${(p.start_at||p.end_at)?` · ${p.start_at?esc(p.start_at):"…"} → ${p.end_at?esc(p.end_at):"…"}`:""}</div>
       <div class="row"><label>Name <input class="p-name" value="${esc(p.name)}" style="width:180px"></label>
         <label>Trigger <select class="p-trig">
           <option value="min_plays" ${trig==="min_plays"?"selected":""}>Min. plays (lines)</option>
@@ -270,6 +277,9 @@ class LotteryPosPanel extends HTMLElement{
         <label>Value <input class="p-val" type="number" step="any" min="0" value="${p.trigger_value}" style="width:90px"></label>
         <label>Digits <input class="p-dig" type="number" min="4" max="10" value="${p.code_digits||6}" style="width:70px"></label></div>
       <div class="row"><span class="note" style="width:100%">Games in this promo (none selected = entire ticket / all games):</span>${gameChecks(p.games||[],"p-game")}</div>
+      <div class="row"><label>Start <input class="p-start" type="datetime-local" value="${esc((p.start_at||"").replace(" ","T").slice(0,16))}"></label>
+        <label>End <input class="p-end" type="datetime-local" value="${esc((p.end_at||"").replace(" ","T").slice(0,16))}"></label>
+        <label>Prize (${cur}) <input class="p-prize" type="number" step="any" min="0" value="${Number(p.prize)||0}" style="width:100px" title="Prize amount for winners who check the code on the website"></label></div>
       <div class="row"><input class="p-label" placeholder="Label on ticket" value="${esc(p.label||"")}" style="flex:1" maxlength="80"></div>
       <div class="row"><input class="p-instr" placeholder="Instruction under the code" value="${esc(p.instruction||"")}" style="flex:1" maxlength="200"></div>
       <div class="row"><input class="p-url" placeholder="URL" value="${esc(p.url||"")}" style="flex:1" maxlength="120">
@@ -280,7 +290,7 @@ class LotteryPosPanel extends HTMLElement{
       <div class="paper" style="width:58mm;margin:8px 0">${this.promoBlockHTML({label:p.label,code:String(Math.floor(Math.random()*1e6)).padStart(p.code_digits||6,"0").slice(-(p.code_digits||6)),instruction:p.instruction})}</div>
     </div>`}).join("")||`<div class="empty">No promotions yet — create one below</div>`;
     return `<div class="card" style="grid-column:1/-1"><h3>Promotions</h3>
-      <p class="note">When a ticket meets a trigger, a unique code is printed under the plays. Choose which games count, then set plays, distinct games, or total stake.</p>
+      <p class="note">When a ticket meets a trigger within the start/end window, a unique code is printed under the plays. Set a prize so winners who visit the promo URL can see what they won. Choose which games count, then set plays, distinct games, or total stake.</p>
       ${cards}
       <h3>Add promotion</h3>
       <div class="row"><input id="pn" placeholder="Name (e.g. Buy 3 Diario)" style="flex:1;min-width:160px" maxlength="60">
@@ -292,10 +302,14 @@ class LotteryPosPanel extends HTMLElement{
         <input id="pv" type="number" step="any" min="0" value="3" style="width:90px" title="Trigger value">
         <input id="pd" type="number" min="4" max="10" value="6" style="width:70px" title="Code digits"></div>
       <div class="row"><span class="note" style="width:100%">Games in this promo (none = all games on the ticket):</span>${gameChecks([],"n-game")}</div>
+      <div class="row"><label>Start <input id="ps" type="datetime-local"></label>
+        <label>End <input id="pe" type="datetime-local"></label>
+        <label>Prize (${cur}) <input id="pp" type="number" step="any" min="0" value="0" style="width:100px" title="Prize for winners who check the code on the website"></label></div>
       <div class="row"><input id="pl" placeholder="Label on ticket" value="Qualified for promotion" style="flex:1" maxlength="80"></div>
       <div class="row"><input id="pi" placeholder="Instruction" value="Visit www.shocolottery.com and check if you have won" style="flex:1" maxlength="200"></div>
       <div class="row"><input id="pu" placeholder="URL" value="https://www.shocolottery.com" style="flex:1" maxlength="120">
         <button data-a="addpromo">Create promotion</button></div>
+      <p class="note">Leave start/end empty for no time limit. Prize is the amount shown when a player checks their promo code on the website.</p>
     </div>`}
   promoBlockHTML(p){return `<div class="promo-block" style="border:1.5px dashed #000;padding:6px 4px;margin:6px 0;text-align:center;color:#000;font-family:monospace">
       <div style="font-size:0.9em;text-transform:uppercase;letter-spacing:.04em">${esc(p.label||"Qualified for promotion")}</div>
@@ -323,7 +337,7 @@ class LotteryPosPanel extends HTMLElement{
     <div class="card"><h3>Preview</h3><div id="prev" class="paper"></div></div>`}
   sampleTicket(){const d=this.s.data,g=d.all_games,b=d.all_bet_types,gm=i=>g[i%g.length]?.id,bt=i=>b[i%b.length]?.key;
     const lines=[{game:gm(0),bet_type:bt(0),number:"1234".slice(0,b[0]?.digits||4),amount:2.5,date:today()},{game:gm(1),bet_type:bt(2),number:"56".padEnd(b[2%b.length]?.digits||2,"7").slice(0,b[2%b.length]?.digits||2),amount:1,date:today()}];
-    const promos=(d.promotions||[]).filter(p=>p.enabled!==false).slice(0,1).map(p=>({id:p.id,name:p.name,code:"1".repeat(p.code_digits||6).replace(/./g,(_,i)=>String((i*3+7)%10)),label:p.label,instruction:p.instruction,url:p.url}));
+    const promos=(d.promotions||[]).filter(p=>p.enabled!==false).slice(0,1).map(p=>({id:p.id,name:p.name,code:"1".repeat(p.code_digits||6).replace(/./g,(_,i)=>String((i*3+7)%10)),label:p.label,instruction:p.instruction,url:p.url,prize:p.prize||0}));
     return {id:"261022000112345678",retailer_name:d.retailers[0]?.name||"Retailer",created:new Date(Date.now()-new Date().getTimezoneOffset()*6e4).toISOString(),lines,total:3.5,promotions:promos}}
   refreshPreview(){const p=this.shadowRoot.querySelector("#prev");if(!p)return;const d=this.design();p.style.width=d.width+"mm";p.innerHTML=this.receiptInner(this.sampleTicket(),"TICKET",d)}
   receiptInner(t,title,d){const st=this.s.data.settings,c=this.s.data.currency,al=d.align==="left"?"left":"center",
@@ -369,7 +383,22 @@ class LotteryPosPanel extends HTMLElement{
   async act(a,ds){const s=this.s;
     switch(a){
       case "theme":s.dark=!s.dark;try{localStorage.setItem("lottery_pos_dark",s.dark?"1":"0")}catch(e){}this.render();break;
-      case "tab":s.tab=ds.v;this.render();break;
+      case "tab":{
+        if(ds.v==="sell"&&!this._posTerminal){
+          const url=new URL(location.href);
+          url.hash="pos-terminal";
+          const w=window.open(url.toString(),"lottery_pos_terminal","noopener,noreferrer");
+          if(w){
+            try{w.moveTo(0,0);w.resizeTo(screen.availWidth,screen.availHeight)}catch(e){}
+            this.toast("POS terminal opened in a new window");
+          }else{
+            this.toast("Allow pop-ups to open the full-screen POS",1);
+            s.tab="sell";this.render();
+          }
+          break;
+        }
+        s.tab=ds.v;this.render();break;
+      }
       case "game":s.sel=s.sel.includes(ds.v)?(s.sel.length>1?s.sel.filter(x=>x!==ds.v):s.sel):[...s.sel,ds.v];this.render();break;
       case "bt":s.bt=ds.v;s.num=s.num.slice(0,this.bt().digits);s.field="num";this.render();break;
       case "field":s.field=ds.v;this.paint();break;
@@ -393,11 +422,11 @@ class LotteryPosPanel extends HTMLElement{
       case "report1":{const t=today(),r=await this.call("report",{date_from:t,date_to:t});if(r)this.print(this.reportHTML(r));break}
       case "savegame":{const c=this.shadowRoot.querySelector(`.gcard[data-id="${ds.v}"]`),v=x=>c.querySelector(x),all=[...c.querySelectorAll(".f-bt")],pick=all.filter(i=>i.checked).map(i=>i.value);
         if(!pick.length)return this.toast("Pick at least one bet type",1);const days=[...c.querySelectorAll(".f-day")].filter(i=>i.checked).map(i=>+i.value);if(!days.length)return this.toast("Pick at least one draw day",1);
-        const msg={id:ds.v,name:v(".f-name").value,color:v(".f-color").value,enabled:v(".f-en").checked,open_time:v(".f-open").value,cutoff:v(".f-cut").value,draw_time:v(".f-draw").value,bet_types:pick.length===all.length?[]:pick,draw_days:days.length===7?[]:days};
+        const msg={game_id:String(ds.v),name:v(".f-name").value,color:v(".f-color").value,enabled:v(".f-en").checked,open_time:v(".f-open").value,cutoff:v(".f-cut").value,draw_time:v(".f-draw").value,bet_types:pick.length===all.length?[]:pick,draw_days:days.length===7?[]:days};
         if(s.glogos[ds.v]!==undefined)msg.logo=s.glogos[ds.v];
         if(await this.call("update_game",msg)){delete s.glogos[ds.v];s.data=await this.ws("state");this.toast("Game saved");this.render()}break}
       case "glogoclear":s.glogos[ds.v]="";this.toast("Logo is removed when you press Save");break;
-      case "delgame":{if(!await this.modal({title:"Delete game?",text:"Only possible if it has no sales. Otherwise hide it instead.",ok:"Delete"}))break;if(await this.call("delete_game",{id:ds.v})){s.data=await this.ws("state");this.toast("Game deleted");this.render()}break}
+      case "delgame":{if(!await this.modal({title:"Delete game?",text:"Only possible if it has no sales. Otherwise hide it instead.",ok:"Delete"}))break;if(await this.call("delete_game",{game_id:String(ds.v)})){s.data=await this.ws("state");this.toast("Game deleted");this.render()}break}
       case "savebt":{const r=this.shadowRoot.querySelector(`.btr[data-k="${ds.v}"]`);if(await this.call("update_bet_type",{key:ds.v,label:r.querySelector(".b-label").value,multiplier:+r.querySelector(".b-mult").value,enabled:r.querySelector(".b-en").checked})){s.data=await this.ws("state");this.toast("Bet type saved");this.render()}break}
       case "saveticker":{const q=x=>this.shadowRoot.querySelector(x);if(await this.call("set_ticker",{text:q("#tt").value,enabled:q("#te").checked,speed:+q("#ts").value,color:q("#tc").value})){s.data=await this.ws("state");this.toast("Message saved");this.render()}break}
       case "clearlogo":s.nameDraft=this.shadowRoot.querySelector("#bn")?.value;s.logoDraft="";this.render();break;
@@ -408,21 +437,21 @@ class LotteryPosPanel extends HTMLElement{
       case "sub":s.sub=ds.v;if(ds.v==="results"&&!s.rs)await this.loadResults();else this.render();break;
       case "loadrs":{const q=x=>this.shadowRoot.querySelector(x).value;s.rf=q("#rf");s.rt=q("#rt");await this.loadResults();break}
       case "paywin":{if(!await this.modal({title:"Pay prize",text:`Ticket ${ds.v}`,ok:"Mark as paid"}))break;const r=await this.call("redeem",{ticket_id:ds.v});if(r){this.print(this.receipt(r,"PAID "+fmt(r.prize)));await this.loadResults()}break}
-      case "saveret":{const r=this.shadowRoot.querySelector(`.rtr[data-id="${ds.v}"]`);if(await this.call("update_retailer",{id:ds.v,name:r.querySelector(".r-name").value,commission:+r.querySelector(".r-com").value,active:r.querySelector(".r-act").checked})){s.data=await this.ws("state");this.toast("Retailer saved");this.render()}break}
+      case "saveret":{const r=this.shadowRoot.querySelector(`.rtr[data-id="${ds.v}"]`);if(await this.call("update_retailer",{retailer_id:String(ds.v),name:r.querySelector(".r-name").value,commission:+r.querySelector(".r-com").value,active:r.querySelector(".r-act").checked})){s.data=await this.ws("state");this.toast("Retailer saved");this.render()}break}
       case "savedesign":{const r=await this.call("set_ticket_design",{design:this.design()});if(r){s.data=await this.ws("state");s.design=null;this.toast("Ticket layout saved");this.render()}break}
       case "resetdesign":s.design={...this.designDefaults()};this.render();break;
       case "testprint":{const d=this.design();this.print(this.docHTML(this.receiptInner(this.sampleTicket(),"TEST TICKET",d),d));break}
       case "addpromo":{const q=x=>this.shadowRoot.querySelector(x);
         const games=[...this.shadowRoot.querySelectorAll(".n-game:checked")].map(el=>el.value);
-        const r=await this.call("add_promotion",{name:q("#pn").value,trigger:q("#pt").value,trigger_value:+q("#pv").value,code_digits:+q("#pd").value,games,label:q("#pl").value,instruction:q("#pi").value,url:q("#pu").value,enabled:true});
+        const r=await this.call("add_promotion",{name:q("#pn").value,trigger:q("#pt").value,trigger_value:+q("#pv").value,code_digits:+q("#pd").value,games,label:q("#pl").value,instruction:q("#pi").value,url:q("#pu").value,enabled:true,start_at:q("#ps").value,end_at:q("#pe").value,prize:+q("#pp").value||0});
         if(r){s.data=await this.ws("state");this.toast("Promotion created");this.render()}break}
       case "savepromo":{const c=this.shadowRoot.querySelector(`.promo-card[data-pid="${ds.v}"]`);if(!c)break;
         const v=sel=>c.querySelector(sel);
         const games=[...c.querySelectorAll(".p-game:checked")].map(el=>el.value);
-        const r=await this.call("update_promotion",{id:ds.v,name:v(".p-name").value,trigger:v(".p-trig").value,trigger_value:+v(".p-val").value,code_digits:+v(".p-dig").value,games,label:v(".p-label").value,instruction:v(".p-instr").value,url:v(".p-url").value,enabled:v(".p-en").checked});
+        const r=await this.call("update_promotion",{promotion_id:String(ds.v),name:v(".p-name").value,trigger:v(".p-trig").value,trigger_value:+v(".p-val").value,code_digits:+v(".p-dig").value,games,label:v(".p-label").value,instruction:v(".p-instr").value,url:v(".p-url").value,enabled:v(".p-en").checked,start_at:v(".p-start").value,end_at:v(".p-end").value,prize:+v(".p-prize").value||0});
         if(r){s.data=await this.ws("state");this.toast("Promotion saved");this.render()}break}
       case "delpromo":{if(!await this.modal({title:"Delete promotion",text:"Remove this promotion? Existing ticket codes stay valid.",ok:"Delete"}))break;
-        const r=await this.call("delete_promotion",{id:ds.v});
+        const r=await this.call("delete_promotion",{promotion_id:String(ds.v)});
         if(r!==null){s.data=await this.ws("state");this.toast("Deleted");this.render()}break}
       case "addret":{const q=x=>this.shadowRoot.querySelector(x).value;if(await this.call("add_retailer",{name:q("#rn"),commission:+q("#rc")})){s.data=await this.ws("state");this.toast("Retailer added");this.render()}break}
       case "addgame":{const q=x=>this.shadowRoot.querySelector(x).value;if(await this.call("add_game",{name:q("#gn"),color:q("#gc"),draw_time:q("#gt"),cutoff:q("#gk"),logo:s.gameLogo||q("#gl")})){s.gameLogo="";s.data=await this.ws("state");this.toast("Game added");this.render()}break}

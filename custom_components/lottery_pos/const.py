@@ -6,7 +6,7 @@ PANEL_URL = "lottery-pos"
 STATIC_URL = "/lottery_pos_static/lottery-panel.js"
 SIGNAL_UPDATE = f"{DOMAIN}_update"
 PLATFORMS = ["sensor"]
-VERSION = "0.7.1"
+VERSION = "0.7.2"
 
 # draw_time = informational, cutoff = last minute to sell for TODAY's draw (HH:MM local)
 DEFAULT_GAMES = [
@@ -49,5 +49,8 @@ DEFAULT_PROMOTIONS = [
         "label": "Qualified for promotion",
         "instruction": "Visit www.shocolottery.com and check if you have won",
         "url": "https://www.shocolottery.com",
+        "start_at": "",
+        "end_at": "",
+        "prize": 0.0,
     },
 ]
