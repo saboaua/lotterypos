@@ -104,25 +104,23 @@ def _rsum(s, m): return s.results_summary(m["date_from"], m["date_to"])
 
 @_cmd("add_promotion", {
     vol.Required("name"): str,
-    vol.Optional("trigger", default="min_lines"): str,
-    vol.Optional("trigger_value", default=3): vol.Coerce(int),
+    vol.Optional("trigger", default="min_plays"): str,
+    vol.Optional("trigger_value", default=3): vol.Coerce(float),
     vol.Optional("code_digits", default=6): vol.Coerce(int),
+    vol.Optional("games", default=[]): [str],
     vol.Optional("label", default="Qualified for promotion"): str,
     vol.Optional("instruction", default="Visit www.shocolottery.com and check if you have won"): str,
     vol.Optional("url", default="https://www.shocolottery.com"): str,
     vol.Optional("enabled", default=True): bool,
 }, admin=True)
 def _add_p(s, m):
-    return s.add_promotion(
-        m["name"], m.get("trigger", "min_lines"), m.get("trigger_value", 3),
-        m.get("code_digits", 6), m.get("label", "Qualified for promotion"),
-        m.get("instruction", "Visit www.shocolottery.com and check if you have won"),
-        m.get("url", "https://www.shocolottery.com"), m.get("enabled", True))
+    return s.add_promotion(m)
 
 @_cmd("update_promotion", {
     vol.Required("id"): str,
     vol.Optional("name"): str, vol.Optional("trigger"): str,
-    vol.Optional("trigger_value"): vol.Coerce(int), vol.Optional("code_digits"): vol.Coerce(int),
+    vol.Optional("trigger_value"): vol.Coerce(float), vol.Optional("code_digits"): vol.Coerce(int),
+    vol.Optional("games"): [str],
     vol.Optional("label"): str, vol.Optional("instruction"): str, vol.Optional("url"): str,
     vol.Optional("enabled"): bool,
 }, admin=True)
@@ -134,8 +132,11 @@ def _del_p(s, m):
     s.delete_promotion(m["id"])
     return {}
 
-COMMANDS = [_design, _upd_r, _rsum, _ticker, _upd_g, _del_g, _upd_b, _brand, _state, _sell, _ticket,
-            _last, _cancel, _redeem, _draws, _report, _results, _add_r, _add_g, _add_p, _upd_p, _del_p]
+COMMANDS = [
+    _state, _sell, _ticket, _last, _cancel, _redeem, _draws, _report, _results,
+    _add_r, _add_g, _brand, _ticker, _upd_g, _del_g, _upd_b, _design, _upd_r, _rsum,
+    _add_p, _upd_p, _del_p,
+]
 
 
 def async_register(hass):
