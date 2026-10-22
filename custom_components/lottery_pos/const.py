@@ -6,7 +6,7 @@ PANEL_URL = "lottery-pos"
 STATIC_URL = "/lottery_pos_static/lottery-panel.js"
 SIGNAL_UPDATE = f"{DOMAIN}_update"
 PLATFORMS = ["sensor"]
-VERSION = "0.7.0"
+VERSION = "0.7.1"
 
 # draw_time = informational, cutoff = last minute to sell for TODAY's draw (HH:MM local)
 DEFAULT_GAMES = [
@@ -35,14 +35,16 @@ TICKET_DEFAULTS = {
     "bold_total": True, "show_barcode": True, "show_qr": False, "qr_size": 28, "qr_prefix": "",
 }
 
-# trigger: min_lines | min_games  (min_games = distinct game ids on the ticket)
+# trigger: min_plays | min_games | min_amount
+# games: [] = all games; otherwise only those game ids count toward the trigger
 DEFAULT_PROMOTIONS = [
     {
         "id": "buy3",
         "name": "Buy 3 Plays Promo",
         "enabled": False,
-        "trigger": "min_lines",
+        "trigger": "min_plays",
         "trigger_value": 3,
+        "games": [],
         "code_digits": 6,
         "label": "Qualified for promotion",
         "instruction": "Visit www.shocolottery.com and check if you have won",
