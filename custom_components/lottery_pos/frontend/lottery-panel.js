@@ -135,6 +135,14 @@ table{width:100%;border-collapse:collapse;font-size:13px}td,th{padding:9px 6px;b
 .st{padding:2px 9px;border-radius:999px;font-size:11px;font-weight:700}.st.paid{background:#16a34a22;color:#15803d}.st.unpaid{background:#e11d4822;color:#be123c}.st.pending{background:#f59e0b33;color:#b45309}
 .note{font-size:12px;color:var(--mut);margin:6px 0}.office h4{margin:16px 0 6px}
 @media(max-width:900px){.top .ticker{order:10;flex-basis:100%}.main{grid-template-columns:1fr}.kpi{display:none}.acts{grid-template-columns:repeat(4,1fr)}}
+
+.promo-block{border:1.5px dashed #000;padding:6px 4px;margin:6px 0;text-align:center}
+.promo-block .plabel{font-size:0.9em;text-transform:uppercase;letter-spacing:.04em}
+.promo-block .pcode{font-size:1.55em;font-weight:900;letter-spacing:.18em;margin:4px 0}
+.promo-block .pinstr{font-size:0.82em;line-height:1.25;margin-top:4px}
+.promo-card{border:1px solid var(--line);border-radius:16px;padding:14px;margin-bottom:12px;background:var(--key)}
+.promo-card h4{margin:0 0 8px;display:flex;align-items:center;gap:8px}
+.promo-card .meta{font-size:12px;color:var(--mut);margin-bottom:8px}
 @media(max-width:620px){.shell{flex-direction:column-reverse}.nav{width:100%;flex-direction:row;justify-content:space-around;padding:6px}.nav .logo{display:none}.nav button{width:auto;flex:1}#scan{width:100%}}
 `;
 
@@ -183,7 +191,7 @@ class LotteryPosPanel extends HTMLElement{
     if(q("#logofile"))q("#logofile").onchange=async e=>{const f=e.target.files[0];if(!f)return;try{s.nameDraft=q("#bn").value;s.logoDraft=await this.shrink(f);this.render()}catch(x){this.toast(x.message,1)}};
     if(q("#gfile"))q("#gfile").onchange=async e=>{const f=e.target.files[0];if(!f)return;try{s.gameLogo=await this.shrink(f,96);this.toast("Game logo ready - press Add")}catch(x){this.toast(x.message,1)}};
     this.shadowRoot.querySelectorAll(".f-file").forEach(inp=>inp.onchange=async e=>{const f=e.target.files[0];if(!f)return;try{s.glogos[inp.dataset.id]=await this.shrink(f,96);this.toast("Logo ready - press Save on the game")}catch(x){this.toast(x.message,1)}});
-    this.shadowRoot.querySelectorAll(".d-f").forEach(el=>{const h=()=>{const k=el.dataset.k,d=this.design();d[k]=el.type==="checkbox"?el.checked:["size","qr_size","width"].includes(k)?+el.value:el.value;this.refreshPreview()};el.addEventListener("input",h);el.addEventListener("change",h)});
+    this.shadowRoot.querySelectorAll(".d-f").forEach(el=>{const h=()=>{const k=el.dataset.k,d=this.design();d[k]=el.type==="checkbox"?el.checked:["size","qr_size","width","logo_height"].includes(k)?+el.value:el.value;this.refreshPreview()};el.addEventListener("input",h);el.addEventListener("change",h)});
     this.refreshPreview();this.paint()}
 
   tickerHTML(){const t=this.s.data.settings.ticker;if(!t||!t.enabled||!t.text)return"";const w=t.text.length*18+1000,dur=Math.max(8,w/(30+t.speed*30));return `<div class="ticker"><div class="tk" style="color:${t.color};animation-duration:${dur.toFixed(1)}s">${esc(t.text)}</div></div>`}
@@ -221,9 +229,9 @@ class LotteryPosPanel extends HTMLElement{
       <p class="note">Open exposure = the most you could owe on draws that have no results yet if every open play won.</p>
       <h4>By retailer</h4><table><tr><th>Retailer</th><th>Tickets</th><th>Plays</th><th>Sales</th><th>Comm.</th><th>Prizes</th><th>Unpaid</th><th>Net</th></tr>${r.rows.map(x=>`<tr><td>${esc(x.retailer)}</td><td>${x.tickets}</td><td>${x.lines}</td><td>${fmt(x.sales)}</td><td>${fmt(x.commission)}</td><td>${fmt(x.prizes)}</td><td>${fmt(x.unpaid)}</td><td class="${x.net>=0?"pos":"neg"}">${fmt(x.net)}</td></tr>`).join("")}</table>
       <h4>By game</h4>${r.games.length?`<table><tr><th>Game</th><th>Tickets</th><th>Sales</th><th>Prizes</th><th>Net</th></tr>${r.games.map(x=>`<tr><td>${esc(x.game)}</td><td>${x.tickets}</td><td>${fmt(x.sales)}</td><td>${fmt(x.prizes)}</td><td class="${x.net>=0?"pos":"neg"}">${fmt(x.net)}</td></tr>`).join("")}</table>`:`<div class="empty">No sales in this range</div>`}</div>`}
-  subTabs(){const s=this.s,t=[["games","mdi:calendar-clock","Games & schedule"],["brand","mdi:palette-outline","Branding & message"],["ticket","mdi:receipt-text-outline","Ticket design"],["results","mdi:trophy-outline","Results & winners"],["reports","mdi:chart-box-outline","Reports"],["retailers","mdi:store-outline","Retailers"]];
+  subTabs(){const s=this.s,t=[["games","mdi:calendar-clock","Games & schedule"],["brand","mdi:palette-outline","Branding & message"],["ticket","mdi:receipt-text-outline","Ticket design"],["promos","mdi:gift-outline","Promotions"],["results","mdi:trophy-outline","Results & winners"],["reports","mdi:chart-box-outline","Reports"],["retailers","mdi:store-outline","Retailers"]];
     return `<div class="subtabs">${t.map(x=>`<button class="${s.sub===x[0]?"on":""}" data-a="sub" data-v="${x[0]}"><ha-icon icon="${x[1]}"></ha-icon>${x[2]}</button>`).join("")}</div>`}
-  officeBody(){const f={games:()=>this.gamesCard()+this.btCard()+this.addGameCard(),brand:()=>this.brandCard()+this.tickerCard(),ticket:()=>this.designCard(),results:()=>this.resultsHTML(),reports:()=>this.reportsHTML(),retailers:()=>this.retailersCard()};return (f[this.s.sub]||f.games)()}
+  officeBody(){const f={games:()=>this.gamesCard()+this.btCard()+this.addGameCard(),brand:()=>this.brandCard()+this.tickerCard(),ticket:()=>this.designCard(),promos:()=>this.promosCard(),results:()=>this.resultsHTML(),reports:()=>this.reportsHTML(),retailers:()=>this.retailersCard()};return (f[this.s.sub]||f.games)()}
   tickerCard(){const t=this.s.data.settings.ticker||{},cols=[["#39ff14","Green"],["#ffb000","Amber"],["#ff3b3b","Red"],["#ffffff","White"],["#22d3ee","Cyan"]];return `<div class="card"><h3>Scrolling message</h3>
     <div class="row"><input id="tt" value="${esc(t.text)}" style="flex:1;min-width:220px" maxlength="200" placeholder="Message for the scrolling display"></div>
     <div class="row"><label>Speed <select id="ts">${[1,2,3,4,5,6,7,8,9,10].map(n=>`<option ${n===t.speed?"selected":""}>${n}</option>`).join("")}</select></label>
@@ -243,7 +251,42 @@ class LotteryPosPanel extends HTMLElement{
       <div class="row"><input type="file" id="gfile" accept="image/*"><input id="gl" placeholder="or logo URL (/local/...)" style="flex:1"><button data-a="addgame">Add</button></div></div>`}
   retailersCard(){const d=this.s.data;return `<div class="card" style="grid-column:1/-1"><h3>Retailers</h3><table><tr><th>Name</th><th>Commission %</th><th>Active</th><th></th></tr>${d.all_retailers.map(r=>`<tr class="rtr" data-id="${r.id}"><td><input class="r-name" value="${esc(r.name)}"></td><td><input class="r-com" type="number" step="any" min="0" max="100" value="${r.commission}" style="width:90px"></td><td><input class="r-act" type="checkbox" ${r.active!==false?"checked":""}></td><td><button data-a="saveret" data-v="${r.id}">Save</button></td></tr>`).join("")}</table></div>
     <div class="card"><h3>Add retailer</h3><div class="row"><input id="rn" placeholder="Name"><input id="rc" type="number" placeholder="Commission %" value="10" style="width:120px"><button data-a="addret">Add</button></div></div>`}
-  designDefaults(){return {font:"mono",size:12,width:72,align:"center",header:"",footer:"Good luck!",show_logo:true,show_name:true,show_retailer:true,show_datetime:true,bold_total:true,show_barcode:true,show_qr:false,qr_size:28,qr_prefix:""}}
+  promosCard(){const s=this.s,list=s.data.promotions||[],trig={min_lines:"Min. plays on ticket",min_games:"Min. distinct games"};
+    const cards=list.map(p=>`<div class="promo-card" data-pid="${esc(p.id)}">
+      <h4><ha-icon icon="mdi:gift-outline"></ha-icon> ${esc(p.name)} ${p.enabled!==false?`<span class="st paid">ON</span>`:`<span class="st unpaid">OFF</span>`}</h4>
+      <div class="meta">${trig[p.trigger]||p.trigger}: <b>${p.trigger_value}</b> · ${p.code_digits||6}-digit code</div>
+      <div class="row"><label>Name <input class="p-name" value="${esc(p.name)}" style="width:160px"></label>
+        <label>Trigger <select class="p-trig"><option value="min_lines" ${p.trigger==="min_lines"?"selected":""}>Min. plays</option><option value="min_games" ${p.trigger==="min_games"?"selected":""}>Min. games</option></select></label>
+        <label>Value <input class="p-val" type="number" min="1" max="50" value="${p.trigger_value}" style="width:70px"></label>
+        <label>Digits <input class="p-dig" type="number" min="4" max="10" value="${p.code_digits||6}" style="width:70px"></label></div>
+      <div class="row"><input class="p-label" placeholder="Label on ticket" value="${esc(p.label||"")}" style="flex:1" maxlength="80"></div>
+      <div class="row"><input class="p-instr" placeholder="Instruction under the code" value="${esc(p.instruction||"")}" style="flex:1" maxlength="200"></div>
+      <div class="row"><input class="p-url" placeholder="URL" value="${esc(p.url||"")}" style="flex:1" maxlength="120">
+        <label class="chip"><input type="checkbox" class="p-en" ${p.enabled!==false?"checked":""}> Enabled</label>
+        <button data-a="savepromo" data-v="${esc(p.id)}">Save</button>
+        <button class="ghost" data-a="delpromo" data-v="${esc(p.id)}">Delete</button></div>
+      <div class="note">Preview on ticket:</div>
+      <div class="paper" style="width:58mm;margin:8px 0">${this.promoBlockHTML({label:p.label,code:"1".repeat(p.code_digits||6).replace(/./g,(_,i)=>String((i*3+7)%10)),instruction:p.instruction})}</div>
+    </div>`).join("")||`<div class="empty">No promotions yet — create one below</div>`;
+    return `<div class="card" style="grid-column:1/-1"><h3>Promotions</h3>
+      <p class="note">When a ticket meets a trigger (e.g. 3 plays), a unique code is printed under the plays. Customer visits the URL to check.</p>
+      ${cards}
+      <h3>Add promotion</h3>
+      <div class="row"><input id="pn" placeholder="Name (e.g. Buy 3 Promo)" style="flex:1;min-width:160px" maxlength="60">
+        <select id="pt"><option value="min_lines">Min. plays on ticket</option><option value="min_games">Min. distinct games</option></select>
+        <input id="pv" type="number" min="1" max="50" value="3" style="width:70px" title="Trigger value">
+        <input id="pd" type="number" min="4" max="10" value="6" style="width:70px" title="Code digits"></div>
+      <div class="row"><input id="pl" placeholder="Label on ticket" value="Qualified for promotion" style="flex:1" maxlength="80"></div>
+      <div class="row"><input id="pi" placeholder="Instruction" value="Visit www.shocolottery.com and check if you have won" style="flex:1" maxlength="200"></div>
+      <div class="row"><input id="pu" placeholder="URL" value="https://www.shocolottery.com" style="flex:1" maxlength="120">
+        <button data-a="addpromo">Create promotion</button></div>
+    </div>`}
+  promoBlockHTML(p){return `<div class="promo-block" style="border:1.5px dashed #000;padding:6px 4px;margin:6px 0;text-align:center;color:#000;font-family:monospace">
+      <div style="font-size:0.9em;text-transform:uppercase;letter-spacing:.04em">${esc(p.label||"Qualified for promotion")}</div>
+      <div style="font-size:1.55em;font-weight:900;letter-spacing:.18em;margin:4px 0">${esc(p.code||"000000")}</div>
+      <div style="font-size:0.82em;line-height:1.25;margin-top:4px">${esc(p.instruction||"Visit www.shocolottery.com and check if you have won")}</div>
+    </div>`}
+  designDefaults(){return {font:"mono",size:12,width:72,align:"center",header:"",footer:"Good luck!",show_logo:true,logo_height:40,show_name:true,show_retailer:true,show_datetime:true,bold_total:true,show_barcode:true,show_qr:false,qr_size:28,qr_prefix:""}}
   saved(){return {...this.designDefaults(),...(this.s.data.settings.ticket||{})}}
   design(){return this.s.design||(this.s.design={...this.saved()})}
   designCard(){const d=this.design(),chk=(k,l)=>`<label class="chip"><input type="checkbox" class="d-f" data-k="${k}" ${d[k]?"checked":""}> ${l}</label>`,opt=(arr,cur)=>arr.map(a=>`<option value="${a[0]}" ${String(cur)===String(a[0])?"selected":""}>${a[1]}</option>`).join("");
@@ -252,7 +295,9 @@ class LotteryPosPanel extends HTMLElement{
       <label>Size <input class="d-f" data-k="size" type="number" min="9" max="18" value="${d.size}" style="width:70px"></label>
       <label>Paper <select class="d-f" data-k="width">${opt([[48,"48 mm"],[58,"58 mm"],[72,"72 mm"],[80,"80 mm"]],d.width)}</select></label>
       <label>Align <select class="d-f" data-k="align">${opt([["center","Center"],["left","Left"]],d.align)}</select></label></div>
-    <div class="row">${chk("show_logo","Logo")}${chk("show_name","Lottery name")}${chk("show_retailer","Retailer")}${chk("show_datetime","Date &amp; time")}${chk("bold_total","Bold total")}</div>
+    <div class="row">${chk("show_logo","Logo on top")}${chk("show_name","Lottery name")}${chk("show_retailer","Retailer")}${chk("show_datetime","Date &amp; time")}${chk("bold_total","Bold total")}</div>
+    <div class="row"><label>Logo height <input class="d-f" data-k="logo_height" type="number" min="20" max="80" value="${d.logo_height||40}" style="width:70px"> px</label>
+      <span class="note">Uses the branding logo. Toggle &quot;Logo on top&quot; to show it at the top of every ticket.</span></div>
     <div class="row"><input class="d-f" data-k="header" placeholder="Header text (under the name)" value="${esc(d.header)}" maxlength="120" style="flex:1"></div>
     <div class="row"><input class="d-f" data-k="footer" placeholder="Footer text" value="${esc(d.footer)}" maxlength="200" style="flex:1"></div>
     <h3>Scan codes</h3><div class="row">${chk("show_barcode","Barcode (Code 39)")}${chk("show_qr","QR code")}<label>QR size <input class="d-f" data-k="qr_size" type="number" min="15" max="45" value="${d.qr_size}" style="width:70px"> mm</label></div>
@@ -262,19 +307,21 @@ class LotteryPosPanel extends HTMLElement{
     <div class="card"><h3>Preview</h3><div id="prev" class="paper"></div></div>`}
   sampleTicket(){const d=this.s.data,g=d.all_games,b=d.all_bet_types,gm=i=>g[i%g.length]?.id,bt=i=>b[i%b.length]?.key;
     const lines=[{game:gm(0),bet_type:bt(0),number:"1234".slice(0,b[0]?.digits||4),amount:2.5,date:today()},{game:gm(1),bet_type:bt(2),number:"56".padEnd(b[2%b.length]?.digits||2,"7").slice(0,b[2%b.length]?.digits||2),amount:1,date:today()}];
-    return {id:"261022000112345678",retailer_name:d.retailers[0]?.name||"Retailer",created:new Date(Date.now()-new Date().getTimezoneOffset()*6e4).toISOString(),lines,total:3.5}}
+    const promos=(d.promotions||[]).filter(p=>p.enabled!==false).slice(0,1).map(p=>({id:p.id,name:p.name,code:"1".repeat(p.code_digits||6).replace(/./g,(_,i)=>String((i*3+7)%10)),label:p.label,instruction:p.instruction,url:p.url}));
+    return {id:"261022000112345678",retailer_name:d.retailers[0]?.name||"Retailer",created:new Date(Date.now()-new Date().getTimezoneOffset()*6e4).toISOString(),lines,total:3.5,promotions:promos}}
   refreshPreview(){const p=this.shadowRoot.querySelector("#prev");if(!p)return;const d=this.design();p.style.width=d.width+"mm";p.innerHTML=this.receiptInner(this.sampleTicket(),"TICKET",d)}
   receiptInner(t,title,d){const st=this.s.data.settings,c=this.s.data.currency,al=d.align==="left"?"left":"center",
       fam={mono:'"Courier New",monospace',sans:"Arial,Helvetica,sans-serif",serif:"Georgia,serif",condensed:'"Arial Narrow","Roboto Condensed",Arial,sans-serif'}[d.font]||"monospace",
       row=l=>`<div style="display:flex;justify-content:space-between;gap:6px"><span>${esc(this.gn(l.game))} ${l.date.slice(5)}</span><span>${l.number} ${esc(this.btl(l.bet_type))}</span><b>${fmt(l.amount)}</b></div>`,
       hr='<hr style="border:0;border-top:1px dashed #000;margin:4px 0">';
     return `<div style="font:${d.size}px/1.35 ${fam};width:${d.width-4}mm;margin:0 auto;color:#000">`
-      +(d.show_logo&&st.logo?`<div style="text-align:${al}"><img src="${st.logo}" style="max-height:50px;max-width:100%"></div>`:"")
+      +(d.show_logo&&st.logo?`<div style="text-align:${al}"><img src="${st.logo}" style="max-height:${d.logo_height||40}px;max-width:100%"></div>`:"")
       +(d.show_name?`<div style="text-align:${al};font-weight:bold;font-size:${d.size+3}px">${esc(st.name)}</div>`:"")
       +(d.header?`<div style="text-align:${al}">${esc(d.header)}</div>`:"")
       +`<div style="text-align:${al};font-weight:bold;margin:4px 0">${esc(title)}</div>`
       +(d.show_retailer?`<div>${esc(t.retailer_name||"")}</div>`:"")+(d.show_datetime?`<div>${t.created.replace("T"," ").slice(0,16)}</div>`:"")
       +hr+t.lines.map(row).join("")+hr
+      +(t.promotions&&t.promotions.length?t.promotions.map(p=>`<div class="promo-block" style="border:1.5px dashed #000;padding:6px 4px;margin:6px 0;text-align:center"><div class="plabel" style="font-size:0.9em;text-transform:uppercase;letter-spacing:.04em">${esc(p.label||"Qualified for promotion")}</div><div class="pcode" style="font-size:1.55em;font-weight:900;letter-spacing:.18em;margin:4px 0">${esc(p.code)}</div><div class="pinstr" style="font-size:0.82em;line-height:1.25;margin-top:4px">${esc(p.instruction||"Visit www.shocolottery.com and check if you have won")}</div></div>`).join(""):"")
       +`<div style="display:flex;justify-content:space-between;${d.bold_total?`font-weight:bold;font-size:${d.size+3}px`:""}"><span>TOTAL ${c}</span><span>${fmt(t.total)}</span></div>`
       +(d.show_barcode?`<div style="margin-top:8px">${barcode(t.id)}</div>`:"")
       +(d.show_qr?`<div style="margin-top:8px"><div style="width:${d.qr_size}mm;max-width:100%;margin:0 auto">${qrSVG((d.qr_prefix||"")+t.id)}</div></div>`:"")
@@ -349,6 +396,15 @@ class LotteryPosPanel extends HTMLElement{
       case "savedesign":{const r=await this.call("set_ticket_design",{design:this.design()});if(r){s.data=await this.ws("state");s.design=null;this.toast("Ticket layout saved");this.render()}break}
       case "resetdesign":s.design={...this.designDefaults()};this.render();break;
       case "testprint":{const d=this.design();this.print(this.docHTML(this.receiptInner(this.sampleTicket(),"TEST TICKET",d),d));break}
+      case "addpromo":{const q=x=>this.shadowRoot.querySelector(x).value;
+        const r=await this.call("add_promotion",{name:q("#pn"),trigger:q("#pt"),trigger_value:+q("#pv"),code_digits:+q("#pd"),label:q("#pl"),instruction:q("#pi"),url:q("#pu"),enabled:true});
+        if(r){s.data=await this.ws("state");this.toast("Promotion created");this.render()}break}
+      case "savepromo":{const c=this.shadowRoot.querySelector(`.promo-card[data-pid="${ds.v}"]`);if(!c)break;
+        const v=sel=>c.querySelector(sel);
+        const r=await this.call("update_promotion",{id:ds.v,name:v(".p-name").value,trigger:v(".p-trig").value,trigger_value:+v(".p-val").value,code_digits:+v(".p-dig").value,label:v(".p-label").value,instruction:v(".p-instr").value,url:v(".p-url").value,enabled:v(".p-en").checked});
+        if(r){s.data=await this.ws("state");this.toast("Promotion saved");this.render()}break}
+      case "delpromo":{if(!await this.modal({title:"Delete promotion",text:ds.v,ok:"Delete"}))break;
+        if(await this.call("delete_promotion",{id:ds.v})){s.data=await this.ws("state");this.toast("Deleted");this.render()}break}
       case "addret":{const q=x=>this.shadowRoot.querySelector(x).value;if(await this.call("add_retailer",{name:q("#rn"),commission:+q("#rc")})){s.data=await this.ws("state");this.toast("Retailer added");this.render()}break}
       case "addgame":{const q=x=>this.shadowRoot.querySelector(x).value;if(await this.call("add_game",{name:q("#gn"),color:q("#gc"),draw_time:q("#gt"),cutoff:q("#gk"),logo:s.gameLogo||q("#gl")})){s.gameLogo="";s.data=await this.ws("state");this.toast("Game added");this.render()}break}
     }}

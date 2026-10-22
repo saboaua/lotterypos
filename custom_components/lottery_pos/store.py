@@ -12,8 +12,8 @@ from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
 
-from .const import (DEFAULT_BET_TYPES, DEFAULT_GAMES, DOMAIN, SIGNAL_UPDATE,
-                    STORAGE_KEY, STORAGE_VERSION, TICKET_DEFAULTS)
+from .const import (DEFAULT_BET_TYPES, DEFAULT_GAMES, DEFAULT_PROMOTIONS, DOMAIN,
+                    SIGNAL_UPDATE, STORAGE_KEY, STORAGE_VERSION, TICKET_DEFAULTS)
 
 
 class LotteryError(ValueError):
@@ -34,11 +34,13 @@ class LotteryStore:
                 "bet_types": copy.deepcopy(DEFAULT_BET_TYPES),
                 "retailers": [{"id": "main", "name": "Main Shop", "commission": 10.0, "active": True}],
                 "tickets": {}, "results": {}, "seq": 0,
+                "promotions": copy.deepcopy(DEFAULT_PROMOTIONS),
             }
         data["currency"] = currency
         data.setdefault("settings", {"name": "Lottery POS", "logo": ""})
         data["settings"].setdefault("ticker", {"enabled": True, "text": "Welcome! Play responsibly - good luck to all our players!", "speed": 5, "color": "#39ff14"})
         data["settings"]["ticket"] = {**TICKET_DEFAULTS, **data["settings"].get("ticket", {})}
+        data.setdefault("promotions", copy.deepcopy(DEFAULT_PROMOTIONS))
         for g in data["games"]:
             g.setdefault("open_time", "00:00")
             g.setdefault("enabled", True)
@@ -46,6 +48,14 @@ class LotteryStore:
             g.setdefault("draw_days", [])
         for b in data["bet_types"]:
             b.setdefault("enabled", True)
+        for p in data["promotions"]:
+            p.setdefault("enabled", True)
+            p.setdefault("trigger", "min_lines")
+            p.setdefault("trigger_value", 3)
+            p.setdefault("code_digits", 6)
+            p.setdefault("label", "Qualified for promotion")
+            p.setdefault("instruction", "Visit www.shocolottery.com and check if you have won")
+            p.setdefault("url", "https://www.shocolottery.com")
         self.data = data
         self._save()
 
@@ -119,12 +129,39 @@ class LotteryStore:
         now = dt_util.now()
         self.data["seq"] += 1
         tid = f"{now:%y%m%d}{self.data['seq'] % 10000:04d}{secrets.randbelow(10**8):08d}"
+        promos = self._apply_promotions(clean)
         ticket = {"id": tid, "retailer_id": retailer["id"], "created": now.isoformat(), "lines": clean,
-                  "total": round(sum(l["amount"] for l in clean), 2), "status": "active", "prize": 0.0}
+                  "total": round(sum(l["amount"] for l in clean), 2), "status": "active", "prize": 0.0,
+                  "promotions": promos}
         self.data["tickets"][tid] = ticket
         self._save()
         self.hass.bus.async_fire(f"{DOMAIN}_ticket_sold", {"ticket_id": tid, "retailer_id": retailer["id"], "total": ticket["total"]})
         return self.public(ticket)
+
+    def _apply_promotions(self, lines: list[dict]) -> list[dict]:
+        """Return list of promotion awards for this ticket based on active triggers."""
+        awarded = []
+        n_lines = len(lines)
+        n_games = len({l["game"] for l in lines})
+        for p in self.data.get("promotions", []):
+            if not p.get("enabled", True):
+                continue
+            trig = p.get("trigger", "min_lines")
+            val = int(p.get("trigger_value", 3))
+            ok = (trig == "min_lines" and n_lines >= val) or (trig == "min_games" and n_games >= val)
+            if not ok:
+                continue
+            digits = max(4, min(10, int(p.get("code_digits", 6))))
+            code = f"{secrets.randbelow(10 ** digits):0{digits}d}"
+            awarded.append({
+                "id": p["id"],
+                "name": p.get("name", "Promotion"),
+                "code": code,
+                "label": p.get("label", "Qualified for promotion"),
+                "instruction": p.get("instruction", "Visit www.shocolottery.com and check if you have won"),
+                "url": p.get("url", "https://www.shocolottery.com"),
+            })
+        return awarded
 
     def cancel(self, tid: str) -> dict:
         t = self.ticket(tid)
@@ -311,10 +348,83 @@ class LotteryStore:
             raise LotteryError("Invalid font or alignment")
         if not 8 <= out["size"] <= 20 or not 40 <= out["width"] <= 100 or not 12 <= out["qr_size"] <= 60:
             raise LotteryError("Size out of range")
+        if not 20 <= out.get("logo_height", 40) <= 80:
+            raise LotteryError("Logo height must be 20-80 px")
         out["header"], out["footer"], out["qr_prefix"] = out["header"][:120], out["footer"][:200], out["qr_prefix"][:40]
         self.data["settings"]["ticket"] = out
         self._save()
         return out
+
+    # ---------- promotions ----------
+    def _find_promo(self, pid: str) -> dict:
+        for p in self.data.get("promotions", []):
+            if p["id"] == pid:
+                return p
+        raise LotteryError(f"Unknown promotion: {pid}")
+
+    def add_promotion(self, name: str, trigger: str = "min_lines", trigger_value: int = 3,
+                      code_digits: int = 6, label: str = "Qualified for promotion",
+                      instruction: str = "Visit www.shocolottery.com and check if you have won",
+                      url: str = "https://www.shocolottery.com", enabled: bool = True) -> dict:
+        name = (name or "").strip()[:60]
+        if not name:
+            raise LotteryError("Promotion name is required")
+        if trigger not in ("min_lines", "min_games"):
+            raise LotteryError("Trigger must be min_lines or min_games")
+        if not 1 <= int(trigger_value) <= 50:
+            raise LotteryError("Trigger value must be 1-50")
+        if not 4 <= int(code_digits) <= 10:
+            raise LotteryError("Code digits must be 4-10")
+        pid = re.sub(r"\W+", "_", name.lower()).strip("_") or secrets.token_hex(3)
+        if any(p["id"] == pid for p in self.data.get("promotions", [])):
+            pid = f"{pid}_{secrets.token_hex(2)}"
+        p = {
+            "id": pid, "name": name, "enabled": bool(enabled), "trigger": trigger,
+            "trigger_value": int(trigger_value), "code_digits": int(code_digits),
+            "label": (label or "Qualified for promotion")[:80],
+            "instruction": (instruction or "")[:200],
+            "url": (url or "https://www.shocolottery.com")[:120],
+        }
+        self.data.setdefault("promotions", []).append(p)
+        self._save()
+        return p
+
+    def update_promotion(self, pid: str, f: dict) -> dict:
+        p = self._find_promo(pid)
+        if "name" in f:
+            n = str(f["name"]).strip()[:60]
+            if not n:
+                raise LotteryError("Promotion name is required")
+            p["name"] = n
+        if "trigger" in f:
+            if f["trigger"] not in ("min_lines", "min_games"):
+                raise LotteryError("Trigger must be min_lines or min_games")
+            p["trigger"] = f["trigger"]
+        if "trigger_value" in f:
+            v = int(f["trigger_value"])
+            if not 1 <= v <= 50:
+                raise LotteryError("Trigger value must be 1-50")
+            p["trigger_value"] = v
+        if "code_digits" in f:
+            d = int(f["code_digits"])
+            if not 4 <= d <= 10:
+                raise LotteryError("Code digits must be 4-10")
+            p["code_digits"] = d
+        if "label" in f:
+            p["label"] = str(f["label"])[:80]
+        if "instruction" in f:
+            p["instruction"] = str(f["instruction"])[:200]
+        if "url" in f:
+            p["url"] = str(f["url"])[:120]
+        if "enabled" in f:
+            p["enabled"] = bool(f["enabled"])
+        self._save()
+        return p
+
+    def delete_promotion(self, pid: str) -> None:
+        self._find_promo(pid)
+        self.data["promotions"] = [p for p in self.data["promotions"] if p["id"] != pid]
+        self._save()
 
     def update_retailer(self, rid: str, name: str, commission: float, active: bool) -> dict:
         r = self._find("retailers", "id", rid, "retailer")
