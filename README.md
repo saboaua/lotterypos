@@ -18,6 +18,8 @@ Scanner: the scan box accepts the barcode. Winning ticket → asks to pay; other
 The panel has an icon menu on the left: **Sell**, and (for Home Assistant admin users only) **Results**, **Reports** and **Setup**. Retailers using a non-admin HA user only see Sell.
 **Setup → Branding**: set your lottery name and upload your logo (resized automatically); both show in the menu, top bar and on receipts. Setup also adds retailers and games (with optional game logo upload).
 
+**Setup → Games & draw schedule**: for every game set the name, color, logo, when sales open, the cut-off, the draw time, **which weekdays it draws** (untick days with no draw; the sell screen then greys the game out on those dates), which bet types it accepts, and whether it is shown on the sell screen (hide a game without deleting it). **Bet types & payouts**: rename, change the payout multiplier or switch a bet type off. **Scrolling message**: the LED-style ticker above the sell screen - set the text, speed, color and on/off.
+
 Results tab: enter results (1st/2nd/3rd, 4 digits) → tickets settle automatically. Settlement report per retailer (sales, commission, prizes, net). Add retailers (commission %) and games.
 
 ## Bet types (defaults – EDIT in `const.py` to your real rules/payouts)
@@ -46,5 +48,5 @@ automation:
         data: {message: "Winner {{ trigger.event.data.ticket_id }} pays {{ trigger.event.data.prize }}"}
 ```
 
-## Known limits (v0.1)
+## Known limits (v0.5)
 Cut-off uses HA local time. A ticket becomes payable once all its draws are settled. Receipts print via the browser print dialog (use kiosk-printing for thermal printers). Data stored in `.storage/lottery_pos.data`; back it up.

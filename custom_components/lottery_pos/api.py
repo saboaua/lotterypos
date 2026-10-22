@@ -28,7 +28,8 @@ def _cmd(name, schema=None, admin=False):
 @_cmd("state")
 def _state(s, m):
     d = s.data
-    return {"games": d["games"], "bet_types": d["bet_types"], "currency": d["currency"], "settings": d["settings"],
+    return {"games": [g for g in d["games"] if g.get("enabled", True)], "all_games": d["games"],
+            "bet_types": [b for b in d["bet_types"] if b.get("enabled", True)], "all_bet_types": d["bet_types"], "currency": d["currency"], "settings": d["settings"],
             "retailers": [r for r in d["retailers"] if r.get("active", True)], "summary": s.summary()}
 
 @_cmd("sell", {vol.Required("retailer_id"): str, vol.Required("lines"): [_LINE]})
@@ -70,7 +71,26 @@ def _add_g(s, m): return s.add_game(m["name"], m["color"], m["draw_time"], m["cu
 @_cmd("set_branding", {vol.Required("name"): str, vol.Optional("logo", default=""): str}, admin=True)
 def _brand(s, m): return s.set_branding(m["name"], m["logo"])
 
-COMMANDS = [_brand, _state, _sell, _ticket, _last, _cancel, _redeem, _draws, _report, _results, _add_r, _add_g]
+@_cmd("set_ticker", {vol.Required("text"): str, vol.Required("enabled"): bool, vol.Required("speed"): vol.Coerce(int),
+                     vol.Required("color"): str}, admin=True)
+def _ticker(s, m): return s.set_ticker(m["text"], m["enabled"], m["speed"], m["color"])
+
+@_cmd("update_game", {vol.Required("id"): str, vol.Optional("name"): str, vol.Optional("color"): str,
+                      vol.Optional("draw_time"): str, vol.Optional("open_time"): str, vol.Optional("cutoff"): str,
+                      vol.Optional("enabled"): bool, vol.Optional("bet_types"): [str], vol.Optional("logo"): str,
+                      vol.Optional("draw_days"): [vol.All(int, vol.Range(min=0, max=6))]}, admin=True)
+def _upd_g(s, m): return s.update_game(m["id"], {k: v for k, v in m.items() if k not in ("id", "type")})
+
+@_cmd("delete_game", {vol.Required("id"): str}, admin=True)
+def _del_g(s, m):
+    s.delete_game(m["id"])
+    return {}
+
+@_cmd("update_bet_type", {vol.Required("key"): str, vol.Required("label"): str,
+                          vol.Required("multiplier"): vol.Coerce(float), vol.Required("enabled"): bool}, admin=True)
+def _upd_b(s, m): return s.update_bet_type(m["key"], m["label"], m["multiplier"], m["enabled"])
+
+COMMANDS = [_ticker, _upd_g, _del_g, _upd_b, _brand, _state, _sell, _ticket, _last, _cancel, _redeem, _draws, _report, _results, _add_r, _add_g]
 
 
 def async_register(hass):

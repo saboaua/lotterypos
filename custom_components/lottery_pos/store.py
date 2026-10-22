@@ -1,9 +1,11 @@
 """Persistent data + business logic (sales, results, settlement)."""
 from __future__ import annotations
 
+import calendar
 import copy
 import re
 import secrets
+from datetime import date as _date
 
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.dispatcher import async_dispatcher_send
@@ -35,6 +37,14 @@ class LotteryStore:
             }
         data["currency"] = currency
         data.setdefault("settings", {"name": "Lottery POS", "logo": ""})
+        data["settings"].setdefault("ticker", {"enabled": True, "text": "Welcome! Play responsibly - good luck to all our players!", "speed": 5, "color": "#39ff14"})
+        for g in data["games"]:
+            g.setdefault("open_time", "00:00")
+            g.setdefault("enabled", True)
+            g.setdefault("bet_types", [])
+            g.setdefault("draw_days", [])
+        for b in data["bet_types"]:
+            b.setdefault("enabled", True)
         self.data = data
         self._save()
 
@@ -80,6 +90,11 @@ class LotteryStore:
         for ln in lines:
             game = self._find("games", "id", ln["game"], "game")
             bt = self._find("bet_types", "key", ln["bet_type"], "bet type")
+            if not game.get("enabled", True):
+                raise LotteryError(f"{game['name']} is not on sale")
+            allowed = game.get("bet_types") or []
+            if not bt.get("enabled", True) or (allowed and bt["key"] not in allowed):
+                raise LotteryError(f"{bt['label']} is not available for {game['name']}")
             num, amt = str(ln["number"]), round(float(ln["amount"]), 2)
             if not (num.isdigit() and len(num) == bt["digits"]):
                 raise LotteryError(f"{bt['label']} needs {bt['digits']} digits")
@@ -87,8 +102,16 @@ class LotteryStore:
                 raise LotteryError("Amount must be above 0")
             line = {"game": game["id"], "bet_type": bt["key"], "number": num, "amount": amt,
                     "date": ln["date"], "prize": 0.0, "settled": False}
+            try:
+                wd = _date.fromisoformat(line["date"]).weekday()
+            except ValueError as err:
+                raise LotteryError("Invalid draw date") from err
+            if game.get("draw_days") and wd not in game["draw_days"]:
+                raise LotteryError(f"{game['name']} has no draw on {calendar.day_name[wd]}")
             if self._closed(line):
                 raise LotteryError(f"{game['name']} is closed for {line['date']}")
+            if line["date"] == dt_util.now().date().isoformat() and dt_util.now().strftime("%H:%M") < game["open_time"]:
+                raise LotteryError(f"{game['name']} opens at {game['open_time']}")
             if f"{game['id']}|{line['date']}" in self.data["results"]:
                 raise LotteryError(f"{game['name']} {line['date']} already drawn")
             clean.append(line)
@@ -220,7 +243,7 @@ class LotteryStore:
             raise LotteryError("Logo must be an uploaded image or a /local/ path")
         if len(logo) > 300_000:
             raise LotteryError("Logo image is too large")
-        self.data["settings"] = {"name": name, "logo": logo}
+        self.data["settings"].update({"name": name, "logo": logo})
         self._save()
         return self.data["settings"]
 
@@ -233,12 +256,67 @@ class LotteryStore:
         self._save()
         return r
 
+    def set_ticker(self, text: str, enabled: bool, speed: int, color: str) -> dict:
+        if not re.fullmatch(r"#[0-9a-fA-F]{6}", color):
+            raise LotteryError("Invalid color")
+        self.data["settings"]["ticker"] = {"text": text.strip()[:200], "enabled": bool(enabled),
+                                           "speed": max(1, min(10, int(speed))), "color": color}
+        self._save()
+        return self.data["settings"]["ticker"]
+
+    def update_game(self, gid: str, f: dict) -> dict:
+        g = self._find("games", "id", gid, "game")
+        new = dict(g)
+        for k in ("name", "color", "draw_time", "open_time", "cutoff", "logo"):
+            if k in f:
+                new[k] = f[k]
+        if "enabled" in f:
+            new["enabled"] = bool(f["enabled"])
+        if "bet_types" in f:
+            keys = {b["key"] for b in self.data["bet_types"]}
+            if any(k not in keys for k in f["bet_types"]):
+                raise LotteryError("Unknown bet type")
+            new["bet_types"] = list(f["bet_types"])
+        if "draw_days" in f:
+            days = f["draw_days"]
+            if any(not isinstance(d, int) or not 0 <= d <= 6 for d in days):
+                raise LotteryError("Draw days must be 0 (Mon) to 6 (Sun)")
+            new["draw_days"] = sorted(set(days))
+        if not str(new["name"]).strip():
+            raise LotteryError("Game name is required")
+        for k in ("draw_time", "open_time", "cutoff"):
+            if not re.fullmatch(r"\d\d:\d\d", new[k]):
+                raise LotteryError("Times must be HH:MM")
+        if new["open_time"] >= new["cutoff"]:
+            raise LotteryError("Open time must be before the cut-off")
+        if new["logo"] and not (new["logo"].startswith(("data:image/", "/local/")) and len(new["logo"]) < 300_000):
+            raise LotteryError("Invalid logo")
+        g.update(new)
+        self._save()
+        return g
+
+    def delete_game(self, gid: str) -> None:
+        g = self._find("games", "id", gid, "game")
+        if any(l["game"] == gid for t in self.data["tickets"].values() for l in t["lines"]):
+            raise LotteryError("This game has sales history - hide it instead")
+        self.data["games"].remove(g)
+        self._save()
+
+    def update_bet_type(self, key: str, label: str, multiplier: float, enabled: bool) -> dict:
+        b = self._find("bet_types", "key", key, "bet type")
+        if not label.strip() or multiplier <= 0:
+            raise LotteryError("Label and a payout above 0 are required")
+        b.update({"label": label.strip(), "multiplier": multiplier, "enabled": bool(enabled)})
+        self._save()
+        return b
+
     def add_game(self, name: str, color: str = "#64748b", draw_time: str = "12:00",
                  cutoff: str = "11:45", logo: str = "") -> dict:
         gid = re.sub(r"\W+", "_", name.lower()).strip("_")
         if not gid or any(g["id"] == gid for g in self.data["games"]):
             raise LotteryError("Game already exists")
-        g = {"id": gid, "name": name, "color": color, "draw_time": draw_time, "cutoff": cutoff, "logo": logo}
+        g = {"id": gid, "name": name, "color": color, "draw_time": draw_time, "open_time": "00:00", "cutoff": cutoff,
+             "logo": logo, "enabled": True, "bet_types": [], "draw_days": []}
         self.data["games"].append(g)
         self._save()
         return g
