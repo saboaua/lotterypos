@@ -6,7 +6,7 @@ PANEL_URL = "lottery-pos"
 STATIC_URL = "/lottery_pos_static/lottery-panel.js"
 SIGNAL_UPDATE = f"{DOMAIN}_update"
 PLATFORMS = ["sensor"]
-VERSION = "0.5.2"
+VERSION = "0.6.0"
 
 # draw_time = informational, cutoff = last minute to sell for TODAY's draw (HH:MM local)
 DEFAULT_GAMES = [
@@ -28,3 +28,9 @@ DEFAULT_BET_TYPES = [
     {"key": "2_cifra_bf", "label": "2 Cifra B/F", "digits": 2, "mode": "bf", "multiplier": 40},
     {"key": "2_cifra_b", "label": "2 Cifra B", "digits": 2, "mode": "back", "multiplier": 70},
 ]
+
+TICKET_DEFAULTS = {
+    "font": "mono", "size": 12, "width": 72, "align": "center", "header": "", "footer": "Good luck!",
+    "show_logo": True, "show_name": True, "show_retailer": True, "show_datetime": True, "bold_total": True,
+    "show_barcode": True, "show_qr": False, "qr_size": 28, "qr_prefix": "",
+}

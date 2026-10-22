@@ -1,4 +1,53 @@
 /* Lottery POS panel - tablet-first retailer terminal */
+/* Minimal QR Code encoder (byte mode, ECC level M, versions 1-10). Algorithm after Nayuki's public-domain-style reference. */
+const QR=(()=>{
+const EPB=[-1,10,16,26,18,24,16,18,22,22,26],NB=[-1,1,1,1,2,2,4,4,4,5,5];
+const ALIGN=[null,[],[6,18],[6,22],[6,26],[6,30],[6,34],[6,22,38],[6,24,42],[6,26,46],[6,28,50]];
+const raw=v=>{let r=(16*v+128)*v+64;if(v>=2){const n=Math.floor(v/7)+2;r-=(25*n-10)*n-55;if(v>=7)r-=36}return r};
+const dataCw=v=>Math.floor(raw(v)/8)-EPB[v]*NB[v];
+const gmul=(x,y)=>{let z=0;for(let i=7;i>=0;i--){z=(z<<1)^((z>>>7)*0x11D);z^=((y>>>i)&1)*x}return z};
+const rsDiv=d=>{const r=new Array(d).fill(0);r[d-1]=1;let root=1;for(let i=0;i<d;i++){for(let j=0;j<d;j++){r[j]=gmul(r[j],root);if(j+1<d)r[j]^=r[j+1]}root=gmul(root,2)}return r};
+const rsRem=(data,div)=>{const r=new Array(div.length).fill(0);for(const b of data){const f=b^r.shift();r.push(0);div.forEach((c,i)=>{r[i]^=gmul(c,f)})}return r};
+const MASKS=[(x,y)=>(x+y)%2===0,(x,y)=>y%2===0,(x,y)=>x%3===0,(x,y)=>(x+y)%3===0,(x,y)=>(Math.floor(x/3)+Math.floor(y/2))%2===0,(x,y)=>x*y%2+x*y%3===0,(x,y)=>(x*y%2+x*y%3)%2===0,(x,y)=>((x+y)%2+x*y%3)%2===0];
+function penalty(m,size){let p=0;
+ for(let pass=0;pass<2;pass++){for(let a=0;a<size;a++){let run=1,hist=[];let prev=null;const line=[];for(let b=0;b<size;b++)line.push(pass?m[b][a]:m[a][b]);
+  for(let b=0;b<size;b++){if(b>0&&line[b]===line[b-1]){run++;if(run===5)p+=3;else if(run>5)p++}else run=1}
+  const s=line.map(v=>v?1:0).join("");for(const pat of["10111010000","00001011101"]){let i=-1;while((i=s.indexOf(pat,i+1))>=0)p+=40}}}
+ for(let y=0;y<size-1;y++)for(let x=0;x<size-1;x++){const c=m[y][x];if(c===m[y][x+1]&&c===m[y+1][x]&&c===m[y+1][x+1])p+=3}
+ let dark=0;for(const r of m)for(const c of r)if(c)dark++;const tot=size*size;p+=Math.floor(Math.abs(dark*20-tot*10)/tot)*10;return p}
+function encode(text){
+ const bytes=[...new TextEncoder().encode(text)];let ver=1;
+ for(;ver<=10;ver++){if(4+(ver<=9?8:16)+bytes.length*8<=dataCw(ver)*8)break}
+ if(ver>10)throw new Error("QR text too long");
+ const bits=[],put=(v,l)=>{for(let i=l-1;i>=0;i--)bits.push((v>>>i)&1)};
+ put(4,4);put(bytes.length,ver<=9?8:16);bytes.forEach(b=>put(b,8));
+ const cap=dataCw(ver)*8;put(0,Math.min(4,cap-bits.length));put(0,(8-bits.length%8)%8);
+ for(let pad=0xEC;bits.length<cap;pad^=0xEC^0x11)put(pad,8);
+ const data=[];for(let i=0;i<bits.length;i+=8){let b=0;for(let j=0;j<8;j++)b=(b<<1)|bits[i+j];data.push(b)}
+ const nb=NB[ver],eb=EPB[ver],rawCw=Math.floor(raw(ver)/8),nShort=nb-rawCw%nb,shortLen=Math.floor(rawCw/nb),div=rsDiv(eb),blocks=[];
+ for(let i=0,k=0;i<nb;i++){const len=shortLen-eb+(i<nShort?0:1),dat=data.slice(k,k+len);k+=len;const ecc=rsRem(dat,div);if(i<nShort)dat.push(0);blocks.push(dat.concat(ecc))}
+ const out=[];for(let i=0;i<blocks[0].length;i++)blocks.forEach((b,j)=>{if(i!==shortLen-eb||j>=nShort)out.push(b[i])});
+ const size=ver*4+17,mk=()=>Array.from({length:size},()=>new Array(size).fill(false)),m=mk(),fn=mk();
+ const set=(x,y,v)=>{m[y][x]=v;fn[y][x]=true};
+ for(let i=0;i<size;i++){set(6,i,i%2===0);set(i,6,i%2===0)}
+ const finder=(cx,cy)=>{for(let dy=-4;dy<=4;dy++)for(let dx=-4;dx<=4;dx++){const d=Math.max(Math.abs(dx),Math.abs(dy)),x=cx+dx,y=cy+dy;if(x>=0&&x<size&&y>=0&&y<size)set(x,y,d!==2&&d!==4)}};
+ finder(3,3);finder(size-4,3);finder(3,size-4);
+ const ap=ALIGN[ver],n=ap.length;
+ for(let i=0;i<n;i++)for(let j=0;j<n;j++){if((i===0&&j===0)||(i===0&&j===n-1)||(i===n-1&&j===0))continue;for(let dy=-2;dy<=2;dy++)for(let dx=-2;dx<=2;dx++)set(ap[i]+dx,ap[j]+dy,Math.max(Math.abs(dx),Math.abs(dy))!==1)}
+ const fmt=(mx,mask,mark)=>{const w=(x,y,v)=>{mx[y][x]=v;if(mark)fn[y][x]=true};let rem=mask;for(let i=0;i<10;i++)rem=(rem<<1)^((rem>>>9)*0x537);const bits=((mask<<10)|rem)^0x5412,bit=i=>((bits>>>i)&1)!==0;
+  for(let i=0;i<=5;i++)w(8,i,bit(i));w(8,7,bit(6));w(8,8,bit(7));w(7,8,bit(8));for(let i=9;i<15;i++)w(14-i,8,bit(i));
+  for(let i=0;i<8;i++)w(size-1-i,8,bit(i));for(let i=8;i<15;i++)w(8,size-15+i,bit(i));w(8,size-8,true)};
+ fmt(m,0,true);
+ if(ver>=7){let rem=ver;for(let i=0;i<12;i++)rem=(rem<<1)^((rem>>>11)*0x1F25);const bits=(ver<<12)|rem;for(let i=0;i<18;i++){const b=((bits>>>i)&1)!==0,a=size-11+i%3,c=Math.floor(i/3);set(a,c,b);set(c,a,b)}}
+ let bi=0;for(let right=size-1;right>=1;right-=2){if(right===6)right=5;for(let vert=0;vert<size;vert++){for(let j=0;j<2;j++){const x=right-j,up=((right+1)&2)===0,y=up?size-1-vert:vert;if(!fn[y][x]&&bi<out.length*8){m[y][x]=((out[bi>>>3]>>>(7-(bi&7)))&1)!==0;bi++}}}}
+ let best=null,bp=1e9;
+ for(let mask=0;mask<8;mask++){const c=m.map(r=>r.slice());for(let y=0;y<size;y++)for(let x=0;x<size;x++)if(!fn[y][x]&&MASKS[mask](x,y))c[y][x]=!c[y][x];fmt(c,mask,false);const p=penalty(c,size);if(p<bp){bp=p;best=c}}
+ return {size,m:best}}
+function svg(text){const {size,m}=encode(text),q=2;let d="";for(let y=0;y<size;y++)for(let x=0;x<size;x++)if(m[y][x])d+=`M${x+q},${y+q}h1v1h-1z`;const t=size+q*2;return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${t} ${t}" shape-rendering="crispEdges" width="100%"><rect width="${t}" height="${t}" fill="#fff"/><path d="${d}" fill="#000"/></svg>`}
+return {encode,svg}})();
+const qrSVG=t=>QR.svg(t);
+
+const ago=n=>new Date(Date.now()-new Date().getTimezoneOffset()*6e4-n*864e5).toISOString().slice(0,10);
 const C39={0:"nnnwwnwnn",1:"wnnwnnnnw",2:"nnwwnnnnw",3:"wnwwnnnnn",4:"nnnwwnnnw",5:"wnnwwnnnn",6:"nnwwwnnnn",7:"nnnwnnwnw",8:"wnnwnnwnn",9:"nnwwnnwnn","*":"nwnnwnwnn"};
 const barcode=id=>{let x=0,r="";for(const ch of "*"+id+"*"){const p=C39[ch];for(let i=0;i<9;i++){const w=p[i]==="w"?3:1;if(i%2===0)r+=`<rect x="${x}" width="${w}" height="40"/>`;x+=w}x+=1}return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${x} 40" width="100%" height="50" preserveAspectRatio="none">${r}</svg>`};
 const today=()=>new Date(Date.now()-new Date().getTimezoneOffset()*6e4).toISOString().slice(0,10);
@@ -79,13 +128,19 @@ table{width:100%;border-collapse:collapse;font-size:13px}td,th{padding:9px 6px;b
 .ln .ed{background:#4f46e522;color:var(--pri)}.ln.editing{background:#4f46e51a;border-radius:10px;outline:2px solid var(--pri)}
 .add.upd{background:linear-gradient(135deg,#4f46e5,#7c3aed);box-shadow:0 8px 20px #4f46e555}
 .editbar{grid-column:1/-1;background:#4f46e51a;color:var(--pri);border-radius:12px;padding:8px 12px;font-weight:600;font-size:13px}
+.office{flex:1;min-height:0;align-content:start}
+.subtabs{display:flex;gap:8px;padding:0 16px 12px;overflow:auto}.subtabs button{display:flex;gap:6px;align-items:center;white-space:nowrap;background:var(--card);box-shadow:var(--sh)}
+.subtabs button.on{background:linear-gradient(135deg,var(--pri),var(--pri2));color:#fff}.subtabs ha-icon{--mdc-icon-size:20px}
+.paper{background:#fff;color:#000;padding:10px 4px;margin:0 auto;box-shadow:0 4px 18px #0003;border-radius:4px;max-width:100%;overflow:hidden}
+.st{padding:2px 9px;border-radius:999px;font-size:11px;font-weight:700}.st.paid{background:#16a34a22;color:#15803d}.st.unpaid{background:#e11d4822;color:#be123c}.st.pending{background:#f59e0b33;color:#b45309}
+.note{font-size:12px;color:var(--mut);margin:6px 0}.office h4{margin:16px 0 6px}
 @media(max-width:900px){.top .ticker{order:10;flex-basis:100%}.main{grid-template-columns:1fr}.kpi{display:none}.acts{grid-template-columns:repeat(4,1fr)}}
 @media(max-width:620px){.shell{flex-direction:column-reverse}.nav{width:100%;flex-direction:row;justify-content:space-around;padding:6px}.nav .logo{display:none}.nav button{width:auto;flex:1}#scan{width:100%}}
 `;
 
 class LotteryPosPanel extends HTMLElement{
   constructor(){super();this.attachShadow({mode:"open"});
-    this.s={tab:"sell",sel:[],bt:"",date:today(),num:"",amt:"",field:"num",lines:[],retailer:"",data:null,scan:"",report:null,glogos:{}};
+    this.s={tab:"sell",sel:[],bt:"",date:today(),num:"",amt:"",field:"num",lines:[],retailer:"",data:null,scan:"",report:null,glogos:{},sub:"games"};
     this._kh=e=>this.onKey(e)}
   connectedCallback(){window.addEventListener("keydown",this._kh)}
   disconnectedCallback(){window.removeEventListener("keydown",this._kh);clearInterval(this._tm)}
@@ -110,9 +165,9 @@ class LotteryPosPanel extends HTMLElement{
   shrink(file,max=240){return new Promise((res,rej)=>{const img=new Image(),u=URL.createObjectURL(file);img.onload=()=>{const k=Math.min(1,max/Math.max(img.width,img.height)),c=document.createElement("canvas");c.width=Math.round(img.width*k);c.height=Math.round(img.height*k);c.getContext("2d").drawImage(img,0,0,c.width,c.height);URL.revokeObjectURL(u);res(c.toDataURL("image/png"))};img.onerror=()=>rej(new Error("Not an image"));img.src=u})}
   render(){const s=this.s;if(!s.data)return;this.classList.toggle("dark",!!s.dark);const d=s.data,st=d.settings,admin=!!this._hass.user?.is_admin;
     if(!admin&&s.tab!=="sell")s.tab="sell";
-    const items=[["sell","mdi:cash-register","Sell",1],["results","mdi:numeric","Results",admin],["reports","mdi:chart-box-outline","Reports",admin],["setup","mdi:cog","Setup",admin]];
+    const items=[["sell","mdi:cash-register","Sell",1],["office","mdi:cog","Back office",admin]];
     const nav=items.filter(i=>i[3]).map(i=>`<button class="${s.tab===i[0]?"on":""}" data-a="tab" data-v="${i[0]}"><ha-icon icon="${i[1]}"></ha-icon>${i[2]}</button>`).join("");
-    const body=s.tab==="sell"?this.sellHTML():`<div class="office">${s.tab==="results"?this.resultsHTML():s.tab==="reports"?this.reportsHTML():this.setupHTML()}</div>`;
+    const body=s.tab==="sell"?this.sellHTML():`${this.subTabs()}<div class="office">${this.officeBody()}</div>`;
     this.shadowRoot.innerHTML=`<style>${CSS}</style><div class="shell"><nav class="nav"><div class="logo">${st.logo?`<img src="${st.logo}">`:esc((st.name||"L").slice(0,2).toUpperCase())}</div>${nav}</nav><div class="content"><div class="top">
       <span class="brand">${esc(st.name)}</span>${this.tickerHTML()||`<span style="flex:1"></span>`}
       <div class="kpi"><span>Sales today</span><b>${d.currency} ${fmt(d.summary.sales_today)}</b></div><div class="kpi"><span>Tickets</span><b>${d.summary.tickets_today}</b></div>
@@ -128,7 +183,8 @@ class LotteryPosPanel extends HTMLElement{
     if(q("#logofile"))q("#logofile").onchange=async e=>{const f=e.target.files[0];if(!f)return;try{s.nameDraft=q("#bn").value;s.logoDraft=await this.shrink(f);this.render()}catch(x){this.toast(x.message,1)}};
     if(q("#gfile"))q("#gfile").onchange=async e=>{const f=e.target.files[0];if(!f)return;try{s.gameLogo=await this.shrink(f,96);this.toast("Game logo ready - press Add")}catch(x){this.toast(x.message,1)}};
     this.shadowRoot.querySelectorAll(".f-file").forEach(inp=>inp.onchange=async e=>{const f=e.target.files[0];if(!f)return;try{s.glogos[inp.dataset.id]=await this.shrink(f,96);this.toast("Logo ready - press Save on the game")}catch(x){this.toast(x.message,1)}});
-    this.paint()}
+    this.shadowRoot.querySelectorAll(".d-f").forEach(el=>{const h=()=>{const k=el.dataset.k,d=this.design();d[k]=el.type==="checkbox"?el.checked:["size","qr_size","width"].includes(k)?+el.value:el.value;this.refreshPreview()};el.addEventListener("input",h);el.addEventListener("change",h)});
+    this.refreshPreview();this.paint()}
 
   tickerHTML(){const t=this.s.data.settings.ticker;if(!t||!t.enabled||!t.text)return"";const w=t.text.length*18+1000,dur=Math.max(8,w/(30+t.speed*30));return `<div class="ticker"><div class="tk" style="color:${t.color};animation-duration:${dur.toFixed(1)}s">${esc(t.text)}</div></div>`}
 
@@ -148,12 +204,26 @@ class LotteryPosPanel extends HTMLElement{
   </section><section class="right card"><div class="rhead"><h3>Current ticket</h3><span class="badge" id="cnt">0</span></div><div class="rsub">${s.sel.length} game(s) · tap ✎ to edit a play</div>
     <div id="lines"></div><div class="foot"><div><small>Total</small><div class="tot" id="tot"></div></div><button class="send" data-a="send">Send &amp; Print ▶</button></div></section></div>`}
 
-  resultsHTML(){const d=this.s.data;return `<div class="card"><h3>Enter draw results</h3><div class="row"><select id="rg">${d.all_games.map(g=>`<option value="${g.id}">${g.name}</option>`).join("")}</select><input type="date" id="rd" value="${today()}"></div>
-      <div class="row"><input id="r1" maxlength="4" placeholder="1st" size="5" inputmode="numeric"><input id="r2" maxlength="4" placeholder="2nd" size="5" inputmode="numeric"><input id="r3" maxlength="4" placeholder="3rd" size="5" inputmode="numeric"></div><button data-a="saveres">Save &amp; settle</button></div>`}
-  reportsHTML(){const r=this.s.report,t=today(),c=this.s.data.currency;return `<div class="card" style="grid-column:1/-1"><h3>Settlement report</h3><div class="row"><input type="date" id="f" value="${t}"><input type="date" id="t" value="${t}"><button data-a="runreport">Run</button><button data-a="printreport">Print</button></div>
-      ${r?`<div class="kpis"><div class="kc"><span>Sales</span><b>${fmt(r.totals.sales)}</b></div><div class="kc"><span>Commission</span><b>${fmt(r.totals.commission)}</b></div><div class="kc"><span>Prizes</span><b>${fmt(r.totals.prizes)}</b></div><div class="kc"><span>Net (${c})</span><b class="${r.totals.net>=0?"pos":"neg"}">${fmt(r.totals.net)}</b></div></div>
-      <table><tr><th>Retailer</th><th>Tickets</th><th>Sales</th><th>Comm.</th><th>Prizes</th><th>Net</th></tr>${r.rows.map(x=>`<tr><td>${x.retailer}</td><td>${x.tickets}</td><td>${fmt(x.sales)}</td><td>${fmt(x.commission)}</td><td>${fmt(x.prizes)}</td><td class="${x.net>=0?"pos":"neg"}">${fmt(x.net)}</td></tr>`).join("")}</table>`:`<div class="empty">Pick dates and press Run</div>`}</div>`}
-  setupHTML(){return this.setupBase()+this.tickerCard()+this.gamesCard()+this.btCard()}
+  async loadResults(){const s=this.s;s.rf=s.rf||ago(6);s.rt=s.rt||today();const r=await this.call("results_summary",{date_from:s.rf,date_to:s.rt});if(r)s.rs=r;this.render()}
+  resultsHTML(){const s=this.s,d=s.data,cur=d.currency,r=s.rs,lab={redeemed:["paid","Paid"],won:["unpaid","Unpaid"],active:["pending","Pending"]};
+    const badge=x=>`<span class="st ${(lab[x]||["pending",x])[0]}">${(lab[x]||["",x])[1]}</span>`;
+    const form=`<div class="card"><h3>Enter draw results</h3><div class="row"><select id="rg">${d.all_games.map(g=>`<option value="${g.id}">${esc(g.name)}</option>`).join("")}</select><input type="date" id="rd" value="${today()}"></div>
+      <div class="row"><input id="r1" maxlength="4" placeholder="1st" size="5" inputmode="numeric"><input id="r2" maxlength="4" placeholder="2nd" size="5" inputmode="numeric"><input id="r3" maxlength="4" placeholder="3rd" size="5" inputmode="numeric"></div><button data-a="saveres">Save &amp; settle</button></div>`;
+    const kc=(l,v,c="")=>`<div class="kc"><span>${l}</span><b class="${c}">${v}</b></div>`;
+    const kp=r?`<div class="kpis">${kc("Winning tickets",r.totals.winners)}${kc("Prizes won ("+cur+")",fmt(r.totals.prizes))}${kc("Paid",fmt(r.totals.paid),"pos")}${kc("Unpaid liability",fmt(r.totals.unpaid),r.totals.unpaid>0?"neg":"")}</div>`:"";
+    const draws=!r?`<div class="empty">Loading…</div>`:r.draws.length?`<table><tr><th>Game</th><th>Date</th><th>Numbers</th><th>Tickets</th><th>Winners</th><th>Sales</th><th>Prizes</th></tr>${r.draws.map(x=>`<tr><td>${esc(x.game_name)}</td><td>${x.date}</td><td>${x.numbers.join(" · ")}</td><td>${x.tickets}</td><td><b>${x.winners}</b></td><td>${fmt(x.sales)}</td><td>${fmt(x.prizes)}</td></tr>`).join("")}</table>`:`<div class="empty">No results entered in this range</div>`;
+    const wins=r&&r.winners.length?`<h4>Winning tickets</h4><table><tr><th>Ticket</th><th>Retailer</th><th style="text-align:left">Winning plays</th><th>Prize</th><th>Status</th><th></th></tr>${r.winners.map(w=>`<tr><td>…${w.id.slice(-8)}</td><td>${esc(w.retailer)}</td><td style="text-align:left">${w.lines.map(l=>`${esc(l.game)} ${l.date.slice(5)} <b>${l.number}</b> ${esc(this.btl(l.bet_type))} → ${fmt(l.prize)}`).join("<br>")}</td><td><b>${fmt(w.prize)}</b></td><td>${badge(w.status)}</td><td>${w.status==="won"?`<button data-a="paywin" data-v="${w.id}">Pay</button>`:""}</td></tr>`).join("")}</table>`:"";
+    return form+`<div class="card" style="grid-column:1/-1"><h3>Draws &amp; winners</h3><div class="row"><input type="date" id="rf" value="${s.rf||ago(6)}"><input type="date" id="rt" value="${s.rt||today()}"><button data-a="loadrs">Show</button></div>${kp}${draws}${wins}</div>`}
+  reportsHTML(){const s=this.s,r=s.report,c=s.data.currency,kc=(l,v,cl="")=>`<div class="kc"><span>${l}</span><b class="${cl}">${v}</b></div>`;
+    const head=`<div class="card" style="grid-column:1/-1"><h3>Sales &amp; liability report</h3><div class="row"><input type="date" id="f" value="${s.rpf||today()}"><input type="date" id="t" value="${s.rpt||today()}"><button data-a="runreport">Run</button><button class="ghost" data-a="printreport">Print</button><button class="ghost" data-a="csv">Download CSV</button><small style="color:var(--mut)">by draw date</small></div>`;
+    if(!r)return head+`<div class="empty">Pick dates and press Run</div></div>`;const T=r.totals;
+    return head+`<div class="kpis">${kc("Tickets sold",T.tickets)}${kc("Cancelled",T.cancelled)}${kc("Plays",T.lines)}${kc("Sales ("+c+")",fmt(T.sales))}${kc("Commission",fmt(T.commission))}${kc("Prizes won",fmt(T.prizes))}${kc("Prizes paid",fmt(T.paid),"pos")}${kc("Unpaid liability",fmt(T.unpaid),T.unpaid>0?"neg":"")}${kc("Open exposure",fmt(T.exposure))}${kc("Net",fmt(T.net),T.net>=0?"pos":"neg")}</div>
+      <p class="note">Open exposure = the most you could owe on draws that have no results yet if every open play won.</p>
+      <h4>By retailer</h4><table><tr><th>Retailer</th><th>Tickets</th><th>Plays</th><th>Sales</th><th>Comm.</th><th>Prizes</th><th>Unpaid</th><th>Net</th></tr>${r.rows.map(x=>`<tr><td>${esc(x.retailer)}</td><td>${x.tickets}</td><td>${x.lines}</td><td>${fmt(x.sales)}</td><td>${fmt(x.commission)}</td><td>${fmt(x.prizes)}</td><td>${fmt(x.unpaid)}</td><td class="${x.net>=0?"pos":"neg"}">${fmt(x.net)}</td></tr>`).join("")}</table>
+      <h4>By game</h4>${r.games.length?`<table><tr><th>Game</th><th>Tickets</th><th>Sales</th><th>Prizes</th><th>Net</th></tr>${r.games.map(x=>`<tr><td>${esc(x.game)}</td><td>${x.tickets}</td><td>${fmt(x.sales)}</td><td>${fmt(x.prizes)}</td><td class="${x.net>=0?"pos":"neg"}">${fmt(x.net)}</td></tr>`).join("")}</table>`:`<div class="empty">No sales in this range</div>`}</div>`}
+  subTabs(){const s=this.s,t=[["games","mdi:calendar-clock","Games & schedule"],["brand","mdi:palette-outline","Branding & message"],["ticket","mdi:receipt-text-outline","Ticket design"],["results","mdi:trophy-outline","Results & winners"],["reports","mdi:chart-box-outline","Reports"],["retailers","mdi:store-outline","Retailers"]];
+    return `<div class="subtabs">${t.map(x=>`<button class="${s.sub===x[0]?"on":""}" data-a="sub" data-v="${x[0]}"><ha-icon icon="${x[1]}"></ha-icon>${x[2]}</button>`).join("")}</div>`}
+  officeBody(){const f={games:()=>this.gamesCard()+this.btCard()+this.addGameCard(),brand:()=>this.brandCard()+this.tickerCard(),ticket:()=>this.designCard(),results:()=>this.resultsHTML(),reports:()=>this.reportsHTML(),retailers:()=>this.retailersCard()};return (f[this.s.sub]||f.games)()}
   tickerCard(){const t=this.s.data.settings.ticker||{},cols=[["#39ff14","Green"],["#ffb000","Amber"],["#ff3b3b","Red"],["#ffffff","White"],["#22d3ee","Cyan"]];return `<div class="card"><h3>Scrolling message</h3>
     <div class="row"><input id="tt" value="${esc(t.text)}" style="flex:1;min-width:220px" maxlength="200" placeholder="Message for the scrolling display"></div>
     <div class="row"><label>Speed <select id="ts">${[1,2,3,4,5,6,7,8,9,10].map(n=>`<option ${n===t.speed?"selected":""}>${n}</option>`).join("")}</select></label>
@@ -166,13 +236,50 @@ class LotteryPosPanel extends HTMLElement{
     <div class="row">${d.all_bet_types.map(b=>`<label class="chip"><input type="checkbox" class="f-bt" value="${b.key}" ${!g.bet_types.length||g.bet_types.includes(b.key)?"checked":""}> ${b.label}</label>`).join("")}</div>
     <div class="row"><input type="file" class="f-file" data-id="${g.id}" accept="image/*" style="max-width:190px"><button class="ghost" data-a="glogoclear" data-v="${g.id}">Remove logo</button><span style="flex:1"></span><button data-a="savegame" data-v="${g.id}">Save</button><button class="ghost dng" data-a="delgame" data-v="${g.id}">Delete</button></div></div>`).join("")}</div></div>`}
   btCard(){const d=this.s.data;return `<div class="card" style="grid-column:1/-1"><h3>Bet types &amp; payouts</h3><table><tr><th>Type</th><th>Label</th><th>Payout ×</th><th>On</th><th></th></tr>${d.all_bet_types.map(b=>`<tr class="btr" data-k="${b.key}"><td>${b.digits} digits · ${b.mode}</td><td><input class="b-label" value="${esc(b.label)}" style="width:130px"></td><td><input class="b-mult" type="number" step="any" value="${b.multiplier}" style="width:90px"></td><td><input type="checkbox" class="b-en" ${b.enabled!==false?"checked":""}></td><td><button data-a="savebt" data-v="${b.key}">Save</button></td></tr>`).join("")}</table></div>`}
-  setupBase(){const s=this.s,st=s.data.settings,logo=s.logoDraft!==undefined?s.logoDraft:st.logo;return `
-    <div class="card"><h3>Branding</h3><div class="row"><input id="bn" value="${esc(s.nameDraft??st.name)}" placeholder="Lottery name" style="flex:1" maxlength="40"></div>
-      <div class="row">${logo?`<img class="prev" src="${logo}">`:`<span style="color:#94a3b8">No logo yet</span>`}<input type="file" id="logofile" accept="image/*"><button data-a="clearlogo">Remove logo</button></div>
-      <button data-a="savebrand">Save branding</button></div>
-    <div class="card"><h3>Add retailer</h3><div class="row"><input id="rn" placeholder="Name"><input id="rc" type="number" placeholder="Commission %" value="10" style="width:120px"><button data-a="addret">Add</button></div></div>
-    <div class="card"><h3>Add game</h3><div class="row"><input id="gn" placeholder="Name"><input id="gc" type="color" value="#64748b"><label>Draw <input id="gt" type="time" value="13:00"></label><label>Cut-off <input id="gk" type="time" value="12:45"></label></div>
+  brandCard(){const s=this.s,st=s.data.settings,logo=s.logoDraft!==undefined?s.logoDraft:st.logo;return `<div class="card"><h3>Branding</h3><div class="row"><input id="bn" value="${esc(s.nameDraft??st.name)}" placeholder="Lottery name" style="flex:1" maxlength="40"></div>
+      <div class="row">${logo?`<img class="prev" src="${logo}">`:`<span style="color:#94a3b8">No logo yet</span>`}<input type="file" id="logofile" accept="image/*"><button class="ghost" data-a="clearlogo">Remove logo</button></div>
+      <button data-a="savebrand">Save branding</button></div>`}
+  addGameCard(){return `<div class="card"><h3>Add game</h3><div class="row"><input id="gn" placeholder="Name"><input id="gc" type="color" value="#64748b"><label>Draw <input id="gt" type="time" value="13:00"></label><label>Cut-off <input id="gk" type="time" value="12:45"></label></div>
       <div class="row"><input type="file" id="gfile" accept="image/*"><input id="gl" placeholder="or logo URL (/local/...)" style="flex:1"><button data-a="addgame">Add</button></div></div>`}
+  retailersCard(){const d=this.s.data;return `<div class="card" style="grid-column:1/-1"><h3>Retailers</h3><table><tr><th>Name</th><th>Commission %</th><th>Active</th><th></th></tr>${d.all_retailers.map(r=>`<tr class="rtr" data-id="${r.id}"><td><input class="r-name" value="${esc(r.name)}"></td><td><input class="r-com" type="number" step="any" min="0" max="100" value="${r.commission}" style="width:90px"></td><td><input class="r-act" type="checkbox" ${r.active!==false?"checked":""}></td><td><button data-a="saveret" data-v="${r.id}">Save</button></td></tr>`).join("")}</table></div>
+    <div class="card"><h3>Add retailer</h3><div class="row"><input id="rn" placeholder="Name"><input id="rc" type="number" placeholder="Commission %" value="10" style="width:120px"><button data-a="addret">Add</button></div></div>`}
+  designDefaults(){return {font:"mono",size:12,width:72,align:"center",header:"",footer:"Good luck!",show_logo:true,show_name:true,show_retailer:true,show_datetime:true,bold_total:true,show_barcode:true,show_qr:false,qr_size:28,qr_prefix:""}}
+  saved(){return {...this.designDefaults(),...(this.s.data.settings.ticket||{})}}
+  design(){return this.s.design||(this.s.design={...this.saved()})}
+  designCard(){const d=this.design(),chk=(k,l)=>`<label class="chip"><input type="checkbox" class="d-f" data-k="${k}" ${d[k]?"checked":""}> ${l}</label>`,opt=(arr,cur)=>arr.map(a=>`<option value="${a[0]}" ${String(cur)===String(a[0])?"selected":""}>${a[1]}</option>`).join("");
+    return `<div class="card"><h3>Ticket layout</h3>
+    <div class="row"><label>Font <select class="d-f" data-k="font">${opt([["mono","Monospace (thermal)"],["sans","Sans-serif"],["serif","Serif"],["condensed","Condensed"]],d.font)}</select></label>
+      <label>Size <input class="d-f" data-k="size" type="number" min="9" max="18" value="${d.size}" style="width:70px"></label>
+      <label>Paper <select class="d-f" data-k="width">${opt([[48,"48 mm"],[58,"58 mm"],[72,"72 mm"],[80,"80 mm"]],d.width)}</select></label>
+      <label>Align <select class="d-f" data-k="align">${opt([["center","Center"],["left","Left"]],d.align)}</select></label></div>
+    <div class="row">${chk("show_logo","Logo")}${chk("show_name","Lottery name")}${chk("show_retailer","Retailer")}${chk("show_datetime","Date &amp; time")}${chk("bold_total","Bold total")}</div>
+    <div class="row"><input class="d-f" data-k="header" placeholder="Header text (under the name)" value="${esc(d.header)}" maxlength="120" style="flex:1"></div>
+    <div class="row"><input class="d-f" data-k="footer" placeholder="Footer text" value="${esc(d.footer)}" maxlength="200" style="flex:1"></div>
+    <h3>Scan codes</h3><div class="row">${chk("show_barcode","Barcode (Code 39)")}${chk("show_qr","QR code")}<label>QR size <input class="d-f" data-k="qr_size" type="number" min="15" max="45" value="${d.qr_size}" style="width:70px"> mm</label></div>
+    <div class="row"><input class="d-f" data-k="qr_prefix" placeholder="Optional text before the ticket number inside the QR" value="${esc(d.qr_prefix)}" maxlength="40" style="flex:1"></div>
+    <p class="note">Barcode scanners and 2D/QR scanners type the code into the scan box on the Sell screen. The ticket number is read from the end of the code, so a prefix is fine.</p>
+    <div class="row"><button data-a="savedesign">Save ticket layout</button><button class="ghost" data-a="resetdesign">Reset</button><button class="ghost" data-a="testprint">Print test ticket</button></div></div>
+    <div class="card"><h3>Preview</h3><div id="prev" class="paper"></div></div>`}
+  sampleTicket(){const d=this.s.data,g=d.all_games,b=d.all_bet_types,gm=i=>g[i%g.length]?.id,bt=i=>b[i%b.length]?.key;
+    const lines=[{game:gm(0),bet_type:bt(0),number:"1234".slice(0,b[0]?.digits||4),amount:2.5,date:today()},{game:gm(1),bet_type:bt(2),number:"56".padEnd(b[2%b.length]?.digits||2,"7").slice(0,b[2%b.length]?.digits||2),amount:1,date:today()}];
+    return {id:"261022000112345678",retailer_name:d.retailers[0]?.name||"Retailer",created:new Date(Date.now()-new Date().getTimezoneOffset()*6e4).toISOString(),lines,total:3.5}}
+  refreshPreview(){const p=this.shadowRoot.querySelector("#prev");if(!p)return;const d=this.design();p.style.width=d.width+"mm";p.innerHTML=this.receiptInner(this.sampleTicket(),"TICKET",d)}
+  receiptInner(t,title,d){const st=this.s.data.settings,c=this.s.data.currency,al=d.align==="left"?"left":"center",
+      fam={mono:'"Courier New",monospace',sans:"Arial,Helvetica,sans-serif",serif:"Georgia,serif",condensed:'"Arial Narrow","Roboto Condensed",Arial,sans-serif'}[d.font]||"monospace",
+      row=l=>`<div style="display:flex;justify-content:space-between;gap:6px"><span>${esc(this.gn(l.game))} ${l.date.slice(5)}</span><span>${l.number} ${esc(this.btl(l.bet_type))}</span><b>${fmt(l.amount)}</b></div>`,
+      hr='<hr style="border:0;border-top:1px dashed #000;margin:4px 0">';
+    return `<div style="font:${d.size}px/1.35 ${fam};width:${d.width-4}mm;margin:0 auto;color:#000">`
+      +(d.show_logo&&st.logo?`<div style="text-align:${al}"><img src="${st.logo}" style="max-height:50px;max-width:100%"></div>`:"")
+      +(d.show_name?`<div style="text-align:${al};font-weight:bold;font-size:${d.size+3}px">${esc(st.name)}</div>`:"")
+      +(d.header?`<div style="text-align:${al}">${esc(d.header)}</div>`:"")
+      +`<div style="text-align:${al};font-weight:bold;margin:4px 0">${esc(title)}</div>`
+      +(d.show_retailer?`<div>${esc(t.retailer_name||"")}</div>`:"")+(d.show_datetime?`<div>${t.created.replace("T"," ").slice(0,16)}</div>`:"")
+      +hr+t.lines.map(row).join("")+hr
+      +`<div style="display:flex;justify-content:space-between;${d.bold_total?`font-weight:bold;font-size:${d.size+3}px`:""}"><span>TOTAL ${c}</span><span>${fmt(t.total)}</span></div>`
+      +(d.show_barcode?`<div style="margin-top:8px">${barcode(t.id)}</div>`:"")
+      +(d.show_qr?`<div style="margin-top:8px"><div style="width:${d.qr_size}mm;max-width:100%;margin:0 auto">${qrSVG((d.qr_prefix||"")+t.id)}</div></div>`:"")
+      +`<div style="text-align:center;font-size:${Math.max(8,d.size-1)}px">${t.id}</div>`
+      +(d.footer?`<div style="text-align:center;margin-top:6px">${esc(d.footer)}</div>`:"")+`</div>`}
 
   paint(){const s=this.s,q=x=>this.shadowRoot.querySelector(x);if(s.tab!=="sell"||!q("#num"))return;const bt=this.bt(),cur=s.data.currency;if(!bt)return;
     q("#num").innerHTML=`<small>${bt.label}</small>`+Array.from({length:bt.digits},(_,i)=>`<span class="dg ${s.num[i]?"f":""}">${s.num[i]||""}</span>`).join("");
@@ -217,7 +324,7 @@ class LotteryPosPanel extends HTMLElement{
         s.lines=[];s.editIdx=null;s.fresh=null;s.data=await this.ws("state");this.print(this.receipt(t,"TICKET"));this.toast(`Sold ${t.id}`);this.render();break}
       case "last":{const t=await this.call("last",{retailer_id:s.retailer});if(t)this.print(this.receipt(t,"REPRINT"));break}
       case "replay":{const t=await this.call("last",{retailer_id:s.retailer});if(t)this.load(t);break}
-      case "cancel":{const id=await this.modal({title:"Cancel ticket",input:"Scan or type ticket number",ok:"Cancel ticket"});if(!id)break;const t=await this.call("cancel",{ticket_id:id});if(t){this.print(this.receipt(t,"CANCELLATION RECEIPT"));this.toast("Ticket cancelled")}break}
+      case "cancel":{const id=await this.modal({title:"Cancel ticket",input:"Scan or type ticket number",ok:"Cancel ticket"});if(!id)break;const t=await this.call("cancel",{ticket_id:(String(id).match(/\d{12,}$/)||[String(id)])[0]});if(t){this.print(this.receipt(t,"CANCELLATION RECEIPT"));this.toast("Ticket cancelled")}break}
       case "redeem":{const id=await this.modal({title:"Pay winner",input:"Scan or type ticket number",ok:"Check ticket"});if(id)this.scanned(id);break}
       case "results":{const r=await this.call("draw_results",{date:s.date});if(r)this.print(`<html><body style="font:13px monospace;width:72mm"><h3>RESULTADO ${s.date}</h3>${r.map(x=>`<p><b>${x.game}</b><br>${x.numbers.join(" - ")}</p>`).join("")||"No results yet"}</body></html>`);break}
       case "report1":{const t=today(),r=await this.call("report",{date_from:t,date_to:t});if(r)this.print(this.reportHTML(r));break}
@@ -232,13 +339,21 @@ class LotteryPosPanel extends HTMLElement{
       case "saveticker":{const q=x=>this.shadowRoot.querySelector(x);if(await this.call("set_ticker",{text:q("#tt").value,enabled:q("#te").checked,speed:+q("#ts").value,color:q("#tc").value})){s.data=await this.ws("state");this.toast("Message saved");this.render()}break}
       case "clearlogo":s.nameDraft=this.shadowRoot.querySelector("#bn")?.value;s.logoDraft="";this.render();break;
       case "savebrand":{const q=x=>this.shadowRoot.querySelector(x).value;const logo=s.logoDraft!==undefined?s.logoDraft:s.data.settings.logo;if(await this.call("set_branding",{name:q("#bn"),logo})){s.data=await this.ws("state");s.logoDraft=undefined;s.nameDraft=undefined;this.toast("Branding saved");this.render()}break}
-      case "saveres":{const q=x=>this.shadowRoot.querySelector(x).value;const r=await this.call("set_results",{game:q("#rg"),date:q("#rd"),numbers:[q("#r1"),q("#r2"),q("#r3")].filter(Boolean)});if(r)this.toast(`Settled - ${r.winners.length} winning ticket(s)`);break}
-      case "runreport":case "printreport":{const q=x=>this.shadowRoot.querySelector(x).value;const r=await this.call("report",{date_from:q("#f"),date_to:q("#t")});if(!r)break;s.report=r;if(a==="printreport")this.print(this.reportHTML(r));else this.render();break}
+      case "saveres":{const q=x=>this.shadowRoot.querySelector(x).value;const dt=q("#rd"),r=await this.call("set_results",{game:q("#rg"),date:dt,numbers:[q("#r1"),q("#r2"),q("#r3")].filter(Boolean)});if(r){this.toast(`Settled - ${r.winners.length} winning ticket(s)`);s.rf=!s.rf||dt<s.rf?dt:s.rf;s.rt=!s.rt||dt>s.rt?dt:s.rt;await this.loadResults()}break}
+      case "runreport":case "printreport":{const q=x=>this.shadowRoot.querySelector(x).value;s.rpf=q("#f");s.rpt=q("#t");const r=await this.call("report",{date_from:s.rpf,date_to:s.rpt});if(!r)break;s.report=r;if(a==="printreport")this.print(this.reportHTML(r));else this.render();break}
+      case "csv":{const r=s.report;if(!r)return this.toast("Run the report first",1);const L=[["Retailer","Tickets","Plays","Sales","Commission","Prizes","Paid","Unpaid","Net"],...r.rows.map(x=>[x.retailer,x.tickets,x.lines,x.sales,x.commission,x.prizes,x.paid,x.unpaid,x.net]),[],["Game","Tickets","Sales","Prizes","Net"],...r.games.map(x=>[x.game,x.tickets,x.sales,x.prizes,x.net]),[],["Totals"],...Object.entries(r.totals)];const csv=L.map(row=>row.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(",")).join("\n"),el=document.createElement("a");el.href=URL.createObjectURL(new Blob([csv],{type:"text/csv"}));el.download=`lottery-report-${r.from}_${r.to}.csv`;el.click();break}
+      case "sub":s.sub=ds.v;if(ds.v==="results"&&!s.rs)await this.loadResults();else this.render();break;
+      case "loadrs":{const q=x=>this.shadowRoot.querySelector(x).value;s.rf=q("#rf");s.rt=q("#rt");await this.loadResults();break}
+      case "paywin":{if(!await this.modal({title:"Pay prize",text:`Ticket ${ds.v}`,ok:"Mark as paid"}))break;const r=await this.call("redeem",{ticket_id:ds.v});if(r){this.print(this.receipt(r,"PAID "+fmt(r.prize)));await this.loadResults()}break}
+      case "saveret":{const r=this.shadowRoot.querySelector(`.rtr[data-id="${ds.v}"]`);if(await this.call("update_retailer",{id:ds.v,name:r.querySelector(".r-name").value,commission:+r.querySelector(".r-com").value,active:r.querySelector(".r-act").checked})){s.data=await this.ws("state");this.toast("Retailer saved");this.render()}break}
+      case "savedesign":{const r=await this.call("set_ticket_design",{design:this.design()});if(r){s.data=await this.ws("state");s.design=null;this.toast("Ticket layout saved");this.render()}break}
+      case "resetdesign":s.design={...this.designDefaults()};this.render();break;
+      case "testprint":{const d=this.design();this.print(this.docHTML(this.receiptInner(this.sampleTicket(),"TEST TICKET",d),d));break}
       case "addret":{const q=x=>this.shadowRoot.querySelector(x).value;if(await this.call("add_retailer",{name:q("#rn"),commission:+q("#rc")})){s.data=await this.ws("state");this.toast("Retailer added");this.render()}break}
       case "addgame":{const q=x=>this.shadowRoot.querySelector(x).value;if(await this.call("add_game",{name:q("#gn"),color:q("#gc"),draw_time:q("#gt"),cutoff:q("#gk"),logo:s.gameLogo||q("#gl")})){s.gameLogo="";s.data=await this.ws("state");this.toast("Game added");this.render()}break}
     }}
 
-  async scanned(id){if(!id)return;const s=this.s,cur=s.data.currency;s.scan="";
+  async scanned(id){if(!id)return;id=(String(id).match(/\d{12,}$/)||[String(id)])[0];const s=this.s,cur=s.data.currency;s.scan="";
     const t=await this.call("ticket",{ticket_id:id});this.render();if(!t)return;
     if(t.status==="won"){if(await this.modal({title:"🏆 Winner!",big:`${cur} ${fmt(t.prize)}`,text:`Ticket ${t.id}`,ok:"Pay prize",tone:"win"})){const r=await this.call("redeem",{ticket_id:t.id});if(r){this.print(this.receipt(r,"PAID "+fmt(r.prize)));this.toast("Prize paid");s.data=await this.ws("state");this.render()}}}
     else if(t.status==="redeemed")this.toast("Already paid",1);
@@ -247,9 +362,12 @@ class LotteryPosPanel extends HTMLElement{
     else{this.load(t);this.toast("Draw pending - lines loaded to replay")}}
   load(t){const s=this.s;s.tab="sell";s.editIdx=null;s.lines=t.lines.map(l=>({game:l.game,bet_type:l.bet_type,number:l.number,amount:l.amount,date:l.date<today()?s.date:l.date}));this.render();this.toast(`Replay: ${s.lines.length} line(s) loaded`)}
 
-  receipt(t,title){const c=this.s.data.currency,row=l=>`<div style="display:flex;justify-content:space-between"><span>${this.gn(l.game)} ${l.date.slice(5)}</span><span>${l.number} ${this.btl(l.bet_type)}</span><b>${fmt(l.amount)}</b></div>`;
-    return `<html><body style="font:12px monospace;width:72mm;margin:0 auto">${this.s.data.settings.logo?`<div style="text-align:center"><img src="${this.s.data.settings.logo}" style="max-height:50px"></div>`:""}<div style="text-align:center;font-weight:bold">${esc(this.s.data.settings.name)}</div><h3 style="text-align:center;margin:4px">${title}</h3><div>${t.retailer_name}<br>${t.created.replace("T"," ").slice(0,16)}</div><hr>${t.lines.map(row).join("")}<hr><div style="display:flex;justify-content:space-between"><b>TOTAL ${c}</b><b>${fmt(t.total)}</b></div><div style="margin-top:8px">${barcode(t.id)}</div><div style="text-align:center">${t.id}</div></body></html>`}
-  reportHTML(r){return `<html><body style="font:12px monospace"><h3>SETTLEMENT ${r.from} → ${r.to}</h3><table border="0" width="100%"><tr><th align=left>Retailer</th><th>Tkts</th><th>Sales</th><th>Comm</th><th>Prizes</th><th>Net</th></tr>${r.rows.map(x=>`<tr><td>${x.retailer}</td><td>${x.tickets}</td><td>${fmt(x.sales)}</td><td>${fmt(x.commission)}</td><td>${fmt(x.prizes)}</td><td>${fmt(x.net)}</td></tr>`).join("")}<tr><th align=left>TOTAL</th><th>${r.totals.tickets}</th><th>${fmt(r.totals.sales)}</th><th>${fmt(r.totals.commission)}</th><th>${fmt(r.totals.prizes)}</th><th>${fmt(r.totals.net)}</th></tr></table></body></html>`}
+  docHTML(inner,d){return `<html><head><style>@page{margin:0}body{margin:0;padding:2mm;width:${d.width}mm}</style></head><body>${inner}</body></html>`}
+  receipt(t,title){const d=this.saved();return this.docHTML(this.receiptInner(t,title,d),d)}
+  reportHTML(r){const T=r.totals,c=this.s.data.currency,k=(l,v)=>`<tr><td>${l}</td><td align=right><b>${v}</b></td></tr>`;
+    return `<html><body style="font:12px Arial,sans-serif;margin:16px"><h3>${esc(this.s.data.settings.name)} - report ${r.from} → ${r.to}</h3><table width="300">${k("Tickets sold",T.tickets)}${k("Cancelled",T.cancelled)}${k("Plays",T.lines)}${k("Sales "+c,fmt(T.sales))}${k("Commission",fmt(T.commission))}${k("Prizes won",fmt(T.prizes))}${k("Prizes paid",fmt(T.paid))}${k("Unpaid liability",fmt(T.unpaid))}${k("Open exposure",fmt(T.exposure))}${k("NET",fmt(T.net))}</table>
+    <h4>By retailer</h4><table width="100%" border="0"><tr align=left><th>Retailer</th><th>Tkts</th><th>Sales</th><th>Comm</th><th>Prizes</th><th>Unpaid</th><th>Net</th></tr>${r.rows.map(x=>`<tr><td>${esc(x.retailer)}</td><td>${x.tickets}</td><td>${fmt(x.sales)}</td><td>${fmt(x.commission)}</td><td>${fmt(x.prizes)}</td><td>${fmt(x.unpaid)}</td><td>${fmt(x.net)}</td></tr>`).join("")}</table>
+    <h4>By game</h4><table width="100%"><tr align=left><th>Game</th><th>Tkts</th><th>Sales</th><th>Prizes</th><th>Net</th></tr>${r.games.map(x=>`<tr><td>${esc(x.game)}</td><td>${x.tickets}</td><td>${fmt(x.sales)}</td><td>${fmt(x.prizes)}</td><td>${fmt(x.net)}</td></tr>`).join("")}</table></body></html>`}
   print(html){const w=window.open("","_blank","width=380,height=640");if(!w)return this.toast("Allow pop-ups to print",1);w.document.write(html);w.document.close();w.focus();setTimeout(()=>w.print(),300)}
 }
 customElements.define("lottery-pos-panel",LotteryPosPanel);

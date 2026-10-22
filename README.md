@@ -14,13 +14,19 @@ Pick game(s) (several can be selected at once) → draw date → bet type → ty
 Physical keyboard works too (digits, Backspace, Tab = switch field, Enter = add).
 Scanner: the scan box accepts the barcode. Winning ticket → asks to pay; otherwise its lines are loaded for replay. Buttons: Replay last, Último ticket, Copia number, Cancel, Redeem, Print resultado, Print report, Quick pick.
 
-## Sidebar menu & back office
-The panel has an icon menu on the left: **Sell**, and (for Home Assistant admin users only) **Results**, **Reports** and **Setup**. Retailers using a non-admin HA user only see Sell.
-**Setup → Branding**: set your lottery name and upload your logo (resized automatically); both show in the menu, top bar and on receipts. Setup also adds retailers and games (with optional game logo upload).
+## Back office (admin users)
+Open **Back office** in the panel menu (Home Assistant admin users only - retailers on a normal user only see Sell). It has six tabs:
 
-**Setup → Games & draw schedule**: for every game set the name, color, logo, when sales open, the cut-off, the draw time, **which weekdays it draws** (untick days with no draw; the sell screen then greys the game out on those dates), which bet types it accepts, and whether it is shown on the sell screen (hide a game without deleting it). **Bet types & payouts**: rename, change the payout multiplier or switch a bet type off. **Scrolling message**: the LED-style ticker above the sell screen - set the text, speed, color and on/off.
+| Tab | What you can do |
+|---|---|
+| **Games & schedule** | Per game: name, color, logo, when sales open, cut-off, draw time, draw weekdays, allowed bet types, show/hide on the sell screen. Edit bet type labels, payouts and on/off. Add games. |
+| **Branding & message** | Lottery name + logo; the LED-style scrolling message (text, speed, color, on/off). |
+| **Ticket design** | Font, size, paper width (48/58/72/80 mm), alignment, header/footer text, show/hide logo, name, retailer, date, bold total, **barcode** and **QR code** (size + optional prefix). Live preview and *Print test ticket*. |
+| **Results & winners** | Enter 1st/2nd/3rd numbers (tickets settle automatically). See per draw how many tickets played, how many won and prizes; list of winning tickets with a **Pay** button; paid vs unpaid totals. |
+| **Reports** | Pick dates: tickets sold, cancelled, plays, sales, commission, prizes won/paid, **unpaid prize liability**, **open exposure** (worst case on undrawn plays) and net - by retailer and by game. Print or download CSV. |
+| **Retailers** | Edit name, commission %, active; add retailers. |
 
-Results tab: enter results (1st/2nd/3rd, 4 digits) → tickets settle automatically. Settlement report per retailer (sales, commission, prizes, net). Add retailers (commission %) and games.
+Scanning: a barcode scanner or a 2D/QR scanner types the code into the scan box on the Sell screen. The ticket number is read from the end of the code, so a QR prefix is fine. A winning ticket asks to pay; any other ticket loads its plays for replay.
 
 ## Bet types (defaults – EDIT in `const.py` to your real rules/payouts)
 | Bet | Digits | Wins when | Payout x |
@@ -48,5 +54,5 @@ automation:
         data: {message: "Winner {{ trigger.event.data.ticket_id }} pays {{ trigger.event.data.prize }}"}
 ```
 
-## Known limits (v0.5)
+## Known limits (v0.6)
 Cut-off uses HA local time. A ticket becomes payable once all its draws are settled. Receipts print via the browser print dialog (use kiosk-printing for thermal printers). Data stored in `.storage/lottery_pos.data`; back it up.

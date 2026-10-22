@@ -13,7 +13,7 @@ from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
 
 from .const import (DEFAULT_BET_TYPES, DEFAULT_GAMES, DOMAIN, SIGNAL_UPDATE,
-                    STORAGE_KEY, STORAGE_VERSION)
+                    STORAGE_KEY, STORAGE_VERSION, TICKET_DEFAULTS)
 
 
 class LotteryError(ValueError):
@@ -38,6 +38,7 @@ class LotteryStore:
         data["currency"] = currency
         data.setdefault("settings", {"name": "Lottery POS", "logo": ""})
         data["settings"].setdefault("ticker", {"enabled": True, "text": "Welcome! Play responsibly - good luck to all our players!", "speed": 5, "color": "#39ff14"})
+        data["settings"]["ticket"] = {**TICKET_DEFAULTS, **data["settings"].get("ticket", {})}
         for g in data["games"]:
             g.setdefault("open_time", "00:00")
             g.setdefault("enabled", True)
@@ -197,30 +198,93 @@ class LotteryStore:
 
     # ---------- reports ----------
     def report(self, date_from: str, date_to: str) -> dict:
-        rows: dict[str, dict] = {}
-        for r in self.data["retailers"]:
-            rows[r["id"]] = {"retailer": r["name"], "commission_pct": r["commission"], "tickets": 0,
-                             "sales": 0.0, "commission": 0.0, "prizes": 0.0, "net": 0.0}
+        money = ("sales", "commission", "prizes", "paid", "unpaid", "net")
+        rows = {r["id"]: {"retailer": r["name"], "commission_pct": r["commission"], "tickets": 0, "lines": 0,
+                          "sales": 0.0, "commission": 0.0, "prizes": 0.0, "paid": 0.0, "unpaid": 0.0, "net": 0.0}
+                for r in self.data["retailers"]}
+        games = {g["id"]: {"game": g["name"], "tickets": 0, "sales": 0.0, "prizes": 0.0, "net": 0.0} for g in self.data["games"]}
+        bts = {b["key"]: b for b in self.data["bet_types"]}
+        cancelled, exposure = 0, 0.0
         for t in self.data["tickets"].values():
-            if t["status"] == "cancelled" or t["retailer_id"] not in rows:
+            lines = [l for l in t["lines"] if date_from <= l["date"] <= date_to]
+            if not lines or t["retailer_id"] not in rows:
                 continue
-            row, hit = rows[t["retailer_id"]], False
-            for l in t["lines"]:
-                if date_from <= l["date"] <= date_to:
-                    row["sales"] += l["amount"]
-                    row["prizes"] += l["prize"]
-                    hit = True
-            row["tickets"] += hit
-        totals = {"tickets": 0, "sales": 0.0, "commission": 0.0, "prizes": 0.0, "net": 0.0}
+            if t["status"] == "cancelled":
+                cancelled += 1
+                continue
+            row, seen = rows[t["retailer_id"]], set()
+            row["tickets"] += 1
+            for l in lines:
+                row["lines"] += 1
+                row["sales"] += l["amount"]
+                row["prizes"] += l["prize"]
+                if l["prize"] > 0:
+                    row["paid" if t["status"] == "redeemed" else "unpaid"] += l["prize"]
+                g = games.get(l["game"])
+                if g:
+                    g["sales"] += l["amount"]
+                    g["prizes"] += l["prize"]
+                    if l["game"] not in seen:
+                        g["tickets"] += 1
+                        seen.add(l["game"])
+                if not l["settled"] and l["bet_type"] in bts:
+                    bt = bts[l["bet_type"]]
+                    exposure += l["amount"] * bt["multiplier"] * (3 if bt["mode"] == "chances" else 1)
+        totals = {"tickets": 0, "cancelled": cancelled, "lines": 0, "sales": 0.0, "commission": 0.0, "prizes": 0.0,
+                  "paid": 0.0, "unpaid": 0.0, "net": 0.0, "exposure": round(exposure, 2)}
         for row in rows.values():
             row["commission"] = row["sales"] * row["commission_pct"] / 100
             row["net"] = row["sales"] - row["commission"] - row["prizes"]
-            for k in totals:
+            for k in ("tickets", "lines") + money:
                 totals[k] += row[k]
-            for k in ("sales", "commission", "prizes", "net"):
+            for k in money:
                 row[k] = round(row[k], 2)
-        return {"from": date_from, "to": date_to, "rows": list(rows.values()),
-                "totals": {k: round(v, 2) for k, v in totals.items()}}
+        game_rows = []
+        for g in games.values():
+            if g["tickets"]:
+                g["net"] = round(g["sales"] - g["prizes"], 2)
+                g["sales"], g["prizes"] = round(g["sales"], 2), round(g["prizes"], 2)
+                game_rows.append(g)
+        return {"from": date_from, "to": date_to, "rows": list(rows.values()), "games": game_rows,
+                "totals": {k: round(v, 2) if isinstance(v, float) else v for k, v in totals.items()}}
+
+    def results_summary(self, date_from: str, date_to: str) -> dict:
+        names = {g["id"]: g["name"] for g in self.data["games"]}
+        retailers = {r["id"]: r["name"] for r in self.data["retailers"]}
+        live = [t for t in self.data["tickets"].values() if t["status"] != "cancelled"]
+        draws = []
+        for key, nums in self.data["results"].items():
+            gid, d = key.split("|")
+            if not date_from <= d <= date_to:
+                continue
+            played, won, sales, prizes = set(), set(), 0.0, 0.0
+            for t in live:
+                for l in t["lines"]:
+                    if l["game"] == gid and l["date"] == d:
+                        played.add(t["id"])
+                        sales += l["amount"]
+                        if l["prize"] > 0:
+                            won.add(t["id"])
+                            prizes += l["prize"]
+            draws.append({"game": gid, "game_name": names.get(gid, gid), "date": d, "numbers": nums, "tickets": len(played),
+                          "sales": round(sales, 2), "winners": len(won), "prizes": round(prizes, 2)})
+        draws.sort(key=lambda x: (x["date"], x["game_name"]), reverse=True)
+        winners, paid, unpaid = [], 0.0, 0.0
+        for t in live:
+            wl = [l for l in t["lines"] if l["settled"] and l["prize"] > 0 and date_from <= l["date"] <= date_to]
+            if not wl:
+                continue
+            prize = round(sum(l["prize"] for l in wl), 2)
+            if t["status"] == "redeemed":
+                paid += prize
+            else:
+                unpaid += prize
+            winners.append({"id": t["id"], "retailer": retailers.get(t["retailer_id"], t["retailer_id"]), "prize": prize,
+                            "status": t["status"], "lines": [{"game": names.get(l["game"], l["game"]), "date": l["date"],
+                                                              "number": l["number"], "bet_type": l["bet_type"], "prize": l["prize"]} for l in wl]})
+        winners.sort(key=lambda w: w["prize"], reverse=True)
+        return {"draws": draws, "winners": winners, "totals": {"winners": len(winners), "prizes": round(paid + unpaid, 2),
+                                                                "paid": round(paid, 2), "unpaid": round(unpaid, 2)}}
 
     def summary(self) -> dict:
         today = dt_util.now().date().isoformat()
@@ -235,6 +299,31 @@ class LotteryStore:
         return {"sales_today": round(sales, 2), "tickets_today": count, "unpaid_prizes": round(liability, 2)}
 
     # ---------- setup ----------
+    def set_ticket_design(self, d: dict) -> dict:
+        out = {}
+        for k, default in TICKET_DEFAULTS.items():
+            v = d.get(k, default)
+            try:
+                out[k] = bool(v) if isinstance(default, bool) else int(v) if isinstance(default, int) else str(v)
+            except (TypeError, ValueError) as err:
+                raise LotteryError(f"Invalid value for {k}") from err
+        if out["font"] not in ("mono", "sans", "serif", "condensed") or out["align"] not in ("left", "center"):
+            raise LotteryError("Invalid font or alignment")
+        if not 8 <= out["size"] <= 20 or not 40 <= out["width"] <= 100 or not 12 <= out["qr_size"] <= 60:
+            raise LotteryError("Size out of range")
+        out["header"], out["footer"], out["qr_prefix"] = out["header"][:120], out["footer"][:200], out["qr_prefix"][:40]
+        self.data["settings"]["ticket"] = out
+        self._save()
+        return out
+
+    def update_retailer(self, rid: str, name: str, commission: float, active: bool) -> dict:
+        r = self._find("retailers", "id", rid, "retailer")
+        if not name.strip() or not 0 <= commission <= 100:
+            raise LotteryError("Name required and commission must be 0-100")
+        r.update({"name": name.strip(), "commission": float(commission), "active": bool(active)})
+        self._save()
+        return r
+
     def set_branding(self, name: str, logo: str) -> dict:
         name = name.strip()[:40]
         if not name:

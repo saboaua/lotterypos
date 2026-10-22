@@ -30,7 +30,7 @@ def _state(s, m):
     d = s.data
     return {"games": [g for g in d["games"] if g.get("enabled", True)], "all_games": d["games"],
             "bet_types": [b for b in d["bet_types"] if b.get("enabled", True)], "all_bet_types": d["bet_types"], "currency": d["currency"], "settings": d["settings"],
-            "retailers": [r for r in d["retailers"] if r.get("active", True)], "summary": s.summary()}
+            "retailers": [r for r in d["retailers"] if r.get("active", True)], "all_retailers": d["retailers"], "summary": s.summary()}
 
 @_cmd("sell", {vol.Required("retailer_id"): str, vol.Required("lines"): [_LINE]})
 def _sell(s, m): return s.sell(m["retailer_id"], m["lines"])
@@ -90,7 +90,17 @@ def _del_g(s, m):
                           vol.Required("multiplier"): vol.Coerce(float), vol.Required("enabled"): bool}, admin=True)
 def _upd_b(s, m): return s.update_bet_type(m["key"], m["label"], m["multiplier"], m["enabled"])
 
-COMMANDS = [_ticker, _upd_g, _del_g, _upd_b, _brand, _state, _sell, _ticket, _last, _cancel, _redeem, _draws, _report, _results, _add_r, _add_g]
+@_cmd("set_ticket_design", {vol.Required("design"): dict}, admin=True)
+def _design(s, m): return s.set_ticket_design(m["design"])
+
+@_cmd("update_retailer", {vol.Required("id"): str, vol.Required("name"): str, vol.Required("commission"): vol.Coerce(float),
+                          vol.Required("active"): bool}, admin=True)
+def _upd_r(s, m): return s.update_retailer(m["id"], m["name"], m["commission"], m["active"])
+
+@_cmd("results_summary", {vol.Required("date_from"): str, vol.Required("date_to"): str}, admin=True)
+def _rsum(s, m): return s.results_summary(m["date_from"], m["date_to"])
+
+COMMANDS = [_design, _upd_r, _rsum, _ticker, _upd_g, _del_g, _upd_b, _brand, _state, _sell, _ticket, _last, _cancel, _redeem, _draws, _report, _results, _add_r, _add_g]
 
 
 def async_register(hass):
