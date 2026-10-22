@@ -251,14 +251,25 @@ class LotteryPosPanel extends HTMLElement{
       <div class="row"><input type="file" id="gfile" accept="image/*"><input id="gl" placeholder="or logo URL (/local/...)" style="flex:1"><button data-a="addgame">Add</button></div></div>`}
   retailersCard(){const d=this.s.data;return `<div class="card" style="grid-column:1/-1"><h3>Retailers</h3><table><tr><th>Name</th><th>Commission %</th><th>Active</th><th></th></tr>${d.all_retailers.map(r=>`<tr class="rtr" data-id="${r.id}"><td><input class="r-name" value="${esc(r.name)}"></td><td><input class="r-com" type="number" step="any" min="0" max="100" value="${r.commission}" style="width:90px"></td><td><input class="r-act" type="checkbox" ${r.active!==false?"checked":""}></td><td><button data-a="saveret" data-v="${r.id}">Save</button></td></tr>`).join("")}</table></div>
     <div class="card"><h3>Add retailer</h3><div class="row"><input id="rn" placeholder="Name"><input id="rc" type="number" placeholder="Commission %" value="10" style="width:120px"><button data-a="addret">Add</button></div></div>`}
-  promosCard(){const s=this.s,list=s.data.promotions||[],trig={min_lines:"Min. plays on ticket",min_games:"Min. distinct games"};
-    const cards=list.map(p=>`<div class="promo-card" data-pid="${esc(p.id)}">
+  promosCard(){const s=this.s,list=s.data.promotions||[],games=s.data.all_games||[],cur=s.data.currency||"";
+    const trigLabel={min_plays:"Min. plays",min_games:"Min. distinct games",min_amount:"Min. purchase amount",min_lines:"Min. plays"};
+    const gameChecks=(sel,cls)=>games.map(g=>`<label class="chip"><input type="checkbox" class="${cls}" value="${esc(g.id)}" ${(sel||[]).includes(g.id)?"checked":""}> ${esc(g.name)}</label>`).join("")||`<span class="note">No games defined</span>`;
+    const scopeTxt=p=>{const g=p.games||[];return g.length?g.map(id=>games.find(x=>x.id===id)?.name||id).join(", "):"All games"};
+    const cards=list.map(p=>{
+      const trig=p.trigger==="min_lines"?"min_plays":(p.trigger||"min_plays");
+      const valLabel=trig==="min_amount"?`${cur} ${Number(p.trigger_value).toFixed(2)}`:p.trigger_value;
+      return `<div class="promo-card" data-pid="${esc(p.id)}">
       <h4><ha-icon icon="mdi:gift-outline"></ha-icon> ${esc(p.name)} ${p.enabled!==false?`<span class="st paid">ON</span>`:`<span class="st unpaid">OFF</span>`}</h4>
-      <div class="meta">${trig[p.trigger]||p.trigger}: <b>${p.trigger_value}</b> · ${p.code_digits||6}-digit code</div>
-      <div class="row"><label>Name <input class="p-name" value="${esc(p.name)}" style="width:160px"></label>
-        <label>Trigger <select class="p-trig"><option value="min_lines" ${p.trigger==="min_lines"?"selected":""}>Min. plays</option><option value="min_games" ${p.trigger==="min_games"?"selected":""}>Min. games</option></select></label>
-        <label>Value <input class="p-val" type="number" min="1" max="50" value="${p.trigger_value}" style="width:70px"></label>
+      <div class="meta">${trigLabel[trig]||trig}: <b>${valLabel}</b> · scope: ${esc(scopeTxt(p))} · ${p.code_digits||6}-digit code</div>
+      <div class="row"><label>Name <input class="p-name" value="${esc(p.name)}" style="width:180px"></label>
+        <label>Trigger <select class="p-trig">
+          <option value="min_plays" ${trig==="min_plays"?"selected":""}>Min. plays (lines)</option>
+          <option value="min_games" ${trig==="min_games"?"selected":""}>Min. distinct games</option>
+          <option value="min_amount" ${trig==="min_amount"?"selected":""}>Min. purchase amount (${cur})</option>
+        </select></label>
+        <label>Value <input class="p-val" type="number" step="any" min="0" value="${p.trigger_value}" style="width:90px"></label>
         <label>Digits <input class="p-dig" type="number" min="4" max="10" value="${p.code_digits||6}" style="width:70px"></label></div>
+      <div class="row"><span class="note" style="width:100%">Games in this promo (none selected = entire ticket / all games):</span>${gameChecks(p.games||[],"p-game")}</div>
       <div class="row"><input class="p-label" placeholder="Label on ticket" value="${esc(p.label||"")}" style="flex:1" maxlength="80"></div>
       <div class="row"><input class="p-instr" placeholder="Instruction under the code" value="${esc(p.instruction||"")}" style="flex:1" maxlength="200"></div>
       <div class="row"><input class="p-url" placeholder="URL" value="${esc(p.url||"")}" style="flex:1" maxlength="120">
@@ -266,16 +277,21 @@ class LotteryPosPanel extends HTMLElement{
         <button data-a="savepromo" data-v="${esc(p.id)}">Save</button>
         <button class="ghost" data-a="delpromo" data-v="${esc(p.id)}">Delete</button></div>
       <div class="note">Preview on ticket:</div>
-      <div class="paper" style="width:58mm;margin:8px 0">${this.promoBlockHTML({label:p.label,code:"1".repeat(p.code_digits||6).replace(/./g,(_,i)=>String((i*3+7)%10)),instruction:p.instruction})}</div>
-    </div>`).join("")||`<div class="empty">No promotions yet — create one below</div>`;
+      <div class="paper" style="width:58mm;margin:8px 0">${this.promoBlockHTML({label:p.label,code:String(Math.floor(Math.random()*1e6)).padStart(p.code_digits||6,"0").slice(-(p.code_digits||6)),instruction:p.instruction})}</div>
+    </div>`}).join("")||`<div class="empty">No promotions yet — create one below</div>`;
     return `<div class="card" style="grid-column:1/-1"><h3>Promotions</h3>
-      <p class="note">When a ticket meets a trigger (e.g. 3 plays), a unique code is printed under the plays. Customer visits the URL to check.</p>
+      <p class="note">When a ticket meets a trigger, a unique code is printed under the plays. Choose which games count, then set plays, distinct games, or total stake.</p>
       ${cards}
       <h3>Add promotion</h3>
-      <div class="row"><input id="pn" placeholder="Name (e.g. Buy 3 Promo)" style="flex:1;min-width:160px" maxlength="60">
-        <select id="pt"><option value="min_lines">Min. plays on ticket</option><option value="min_games">Min. distinct games</option></select>
-        <input id="pv" type="number" min="1" max="50" value="3" style="width:70px" title="Trigger value">
+      <div class="row"><input id="pn" placeholder="Name (e.g. Buy 3 Diario)" style="flex:1;min-width:160px" maxlength="60">
+        <select id="pt">
+          <option value="min_plays">Min. plays (lines)</option>
+          <option value="min_games">Min. distinct games</option>
+          <option value="min_amount">Min. purchase amount (${cur})</option>
+        </select>
+        <input id="pv" type="number" step="any" min="0" value="3" style="width:90px" title="Trigger value">
         <input id="pd" type="number" min="4" max="10" value="6" style="width:70px" title="Code digits"></div>
+      <div class="row"><span class="note" style="width:100%">Games in this promo (none = all games on the ticket):</span>${gameChecks([],"n-game")}</div>
       <div class="row"><input id="pl" placeholder="Label on ticket" value="Qualified for promotion" style="flex:1" maxlength="80"></div>
       <div class="row"><input id="pi" placeholder="Instruction" value="Visit www.shocolottery.com and check if you have won" style="flex:1" maxlength="200"></div>
       <div class="row"><input id="pu" placeholder="URL" value="https://www.shocolottery.com" style="flex:1" maxlength="120">
@@ -286,7 +302,7 @@ class LotteryPosPanel extends HTMLElement{
       <div style="font-size:1.55em;font-weight:900;letter-spacing:.18em;margin:4px 0">${esc(p.code||"000000")}</div>
       <div style="font-size:0.82em;line-height:1.25;margin-top:4px">${esc(p.instruction||"Visit www.shocolottery.com and check if you have won")}</div>
     </div>`}
-  designDefaults(){return {font:"mono",size:12,width:72,align:"center",header:"",footer:"Good luck!",show_logo:true,logo_height:40,show_name:true,show_retailer:true,show_datetime:true,bold_total:true,show_barcode:true,show_qr:false,qr_size:28,qr_prefix:""}}
+    designDefaults(){return {font:"mono",size:12,width:72,align:"center",header:"",footer:"Good luck!",show_logo:true,logo_height:40,show_name:true,show_retailer:true,show_datetime:true,bold_total:true,show_barcode:true,show_qr:false,qr_size:28,qr_prefix:""}}
   saved(){return {...this.designDefaults(),...(this.s.data.settings.ticket||{})}}
   design(){return this.s.design||(this.s.design={...this.saved()})}
   designCard(){const d=this.design(),chk=(k,l)=>`<label class="chip"><input type="checkbox" class="d-f" data-k="${k}" ${d[k]?"checked":""}> ${l}</label>`,opt=(arr,cur)=>arr.map(a=>`<option value="${a[0]}" ${String(cur)===String(a[0])?"selected":""}>${a[1]}</option>`).join("");
@@ -396,15 +412,18 @@ class LotteryPosPanel extends HTMLElement{
       case "savedesign":{const r=await this.call("set_ticket_design",{design:this.design()});if(r){s.data=await this.ws("state");s.design=null;this.toast("Ticket layout saved");this.render()}break}
       case "resetdesign":s.design={...this.designDefaults()};this.render();break;
       case "testprint":{const d=this.design();this.print(this.docHTML(this.receiptInner(this.sampleTicket(),"TEST TICKET",d),d));break}
-      case "addpromo":{const q=x=>this.shadowRoot.querySelector(x).value;
-        const r=await this.call("add_promotion",{name:q("#pn"),trigger:q("#pt"),trigger_value:+q("#pv"),code_digits:+q("#pd"),label:q("#pl"),instruction:q("#pi"),url:q("#pu"),enabled:true});
+      case "addpromo":{const q=x=>this.shadowRoot.querySelector(x);
+        const games=[...this.shadowRoot.querySelectorAll(".n-game:checked")].map(el=>el.value);
+        const r=await this.call("add_promotion",{name:q("#pn").value,trigger:q("#pt").value,trigger_value:+q("#pv").value,code_digits:+q("#pd").value,games,label:q("#pl").value,instruction:q("#pi").value,url:q("#pu").value,enabled:true});
         if(r){s.data=await this.ws("state");this.toast("Promotion created");this.render()}break}
       case "savepromo":{const c=this.shadowRoot.querySelector(`.promo-card[data-pid="${ds.v}"]`);if(!c)break;
         const v=sel=>c.querySelector(sel);
-        const r=await this.call("update_promotion",{id:ds.v,name:v(".p-name").value,trigger:v(".p-trig").value,trigger_value:+v(".p-val").value,code_digits:+v(".p-dig").value,label:v(".p-label").value,instruction:v(".p-instr").value,url:v(".p-url").value,enabled:v(".p-en").checked});
+        const games=[...c.querySelectorAll(".p-game:checked")].map(el=>el.value);
+        const r=await this.call("update_promotion",{id:ds.v,name:v(".p-name").value,trigger:v(".p-trig").value,trigger_value:+v(".p-val").value,code_digits:+v(".p-dig").value,games,label:v(".p-label").value,instruction:v(".p-instr").value,url:v(".p-url").value,enabled:v(".p-en").checked});
         if(r){s.data=await this.ws("state");this.toast("Promotion saved");this.render()}break}
-      case "delpromo":{if(!await this.modal({title:"Delete promotion",text:ds.v,ok:"Delete"}))break;
-        if(await this.call("delete_promotion",{id:ds.v})){s.data=await this.ws("state");this.toast("Deleted");this.render()}break}
+      case "delpromo":{if(!await this.modal({title:"Delete promotion",text:"Remove this promotion? Existing ticket codes stay valid.",ok:"Delete"}))break;
+        const r=await this.call("delete_promotion",{id:ds.v});
+        if(r!==null){s.data=await this.ws("state");this.toast("Deleted");this.render()}break}
       case "addret":{const q=x=>this.shadowRoot.querySelector(x).value;if(await this.call("add_retailer",{name:q("#rn"),commission:+q("#rc")})){s.data=await this.ws("state");this.toast("Retailer added");this.render()}break}
       case "addgame":{const q=x=>this.shadowRoot.querySelector(x).value;if(await this.call("add_game",{name:q("#gn"),color:q("#gc"),draw_time:q("#gt"),cutoff:q("#gk"),logo:s.gameLogo||q("#gl")})){s.gameLogo="";s.data=await this.ws("state");this.toast("Game added");this.render()}break}
     }}

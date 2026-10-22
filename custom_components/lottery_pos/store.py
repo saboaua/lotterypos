@@ -66,6 +66,7 @@ class LotteryStore:
         self._store.async_delay_save(lambda: self.data, 1)
         async_dispatcher_send(self.hass, SIGNAL_UPDATE)
 
+    # ---------- lookups ----------
     def _find(self, coll: str, key: str, val: str, label: str) -> dict:
         for item in self.data[coll]:
             if item[key] == val:
@@ -92,6 +93,7 @@ class LotteryStore:
         game = self._find("games", "id", line["game"], "game")
         return line["date"] < today or (line["date"] == today and now.strftime("%H:%M") >= game["cutoff"])
 
+    # ---------- selling ----------
     def sell(self, retailer_id: str, lines: list[dict]) -> dict:
         if not lines:
             raise LotteryError("Ticket is empty")
@@ -140,6 +142,15 @@ class LotteryStore:
         return self.public(ticket)
 
     def _apply_promotions(self, lines: list[dict]) -> list[dict]:
+        """Award promotion codes for every enabled promo whose trigger is met.
+
+        Scope: games empty = all games; otherwise only listed game ids count.
+        Triggers:
+          min_plays  – matching line count >= value
+          min_games  – distinct matching games >= value
+          min_amount – sum of matching amounts >= value (currency)
+        Legacy min_lines is treated as min_plays.
+        """
         awarded = []
         for p in self.data.get("promotions", []):
             if not p.get("enabled", True):
@@ -166,7 +177,9 @@ class LotteryStore:
                 digits = max(4, min(10, int(p.get("code_digits", 6))))
                 code = f"{secrets.randbelow(10 ** digits):0{digits}d}"
                 awarded.append({
-                    "id": p["id"], "name": p.get("name", "Promotion"), "code": code,
+                    "id": p["id"],
+                    "name": p.get("name", "Promotion"),
+                    "code": code,
                     "label": p.get("label", "Qualified for promotion"),
                     "instruction": p.get("instruction", "Visit www.shocolottery.com and check if you have won"),
                     "url": p.get("url", "https://www.shocolottery.com"),
@@ -196,6 +209,7 @@ class LotteryStore:
         self._save()
         return self.public(t)
 
+    # ---------- results & settlement ----------
     def _prize(self, ln: dict, nums: list[str]) -> float:
         bt = self._find("bet_types", "key", ln["bet_type"], "bet type")
         n, first, mode, d = ln["number"], nums[0], bt["mode"], bt["digits"]
@@ -207,7 +221,7 @@ class LotteryStore:
             hits = n in (first[:2], first[-2:])
         elif mode == "back":
             hits = n == first[-2:]
-        else:
+        else:  # chances: last 2 digits of any of the drawn numbers
             hits = sum(1 for x in nums if x[-2:] == n)
         return round(ln["amount"] * bt["multiplier"] * int(hits), 2)
 
@@ -244,6 +258,7 @@ class LotteryStore:
                 out.append({"game": g["name"], "date": d, "numbers": nums})
         return out
 
+    # ---------- reports ----------
     def report(self, date_from: str, date_to: str) -> dict:
         money = ("sales", "commission", "prizes", "paid", "unpaid", "net")
         rows = {r["id"]: {"retailer": r["name"], "commission_pct": r["commission"], "tickets": 0, "lines": 0,
@@ -345,6 +360,7 @@ class LotteryStore:
                 liability += t["prize"]
         return {"sales_today": round(sales, 2), "tickets_today": count, "unpaid_prizes": round(liability, 2)}
 
+    # ---------- setup ----------
     def set_ticket_design(self, d: dict) -> dict:
         out = {}
         for k, default in TICKET_DEFAULTS.items():
@@ -364,6 +380,7 @@ class LotteryStore:
         self._save()
         return out
 
+    # ---------- promotions ----------
     def _find_promo(self, pid: str) -> dict:
         for p in self.data.get("promotions", []):
             if p["id"] == pid:
@@ -371,6 +388,7 @@ class LotteryStore:
         raise LotteryError(f"Unknown promotion: {pid}")
 
     def _normalize_promo_fields(self, f: dict, existing: dict | None = None) -> dict:
+        """Validate and normalise promotion fields for add/update."""
         out = dict(existing or {})
         if "name" in f or existing is None:
             name = str(f.get("name", out.get("name", ""))).strip()[:60]
@@ -413,7 +431,9 @@ class LotteryStore:
             bad = [g for g in games if g not in known]
             if bad:
                 raise LotteryError(f"Unknown game(s): {', '.join(bad)}")
-            seen, uniq = set(), []
+            # unique preserve order
+            seen = set()
+            uniq = []
             for g in games:
                 if g not in seen:
                     seen.add(g)
@@ -422,7 +442,9 @@ class LotteryStore:
         if "label" in f or existing is None:
             out["label"] = str(f.get("label", out.get("label", "Qualified for promotion")))[:80]
         if "instruction" in f or existing is None:
-            out["instruction"] = str(f.get("instruction", out.get("instruction", "Visit www.shocolottery.com and check if you have won")))[:200]
+            out["instruction"] = str(
+                f.get("instruction", out.get("instruction", "Visit www.shocolottery.com and check if you have won"))
+            )[:200]
         if "url" in f or existing is None:
             out["url"] = str(f.get("url", out.get("url", "https://www.shocolottery.com")))[:120]
         if "enabled" in f or existing is None:
@@ -452,6 +474,7 @@ class LotteryStore:
         self._find_promo(pid)
         self.data["promotions"] = [x for x in self.data["promotions"] if x["id"] != pid]
         self._save()
+
 
     def update_retailer(self, rid: str, name: str, commission: float, active: bool) -> dict:
         r = self._find("retailers", "id", rid, "retailer")
