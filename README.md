@@ -22,7 +22,7 @@ Open **Back office** in the panel menu (Home Assistant admin users only - retail
 | **Games & schedule** | Per game: name, color, logo, when sales open, cut-off, draw time, draw weekdays, allowed bet types, show/hide on the sell screen. Edit bet type labels, payouts and on/off. Add games. |
 | **Branding & message** | Lottery name + logo; the LED-style scrolling message (text, speed, color, on/off). |
 | **Ticket design** | Font, size, paper width (48/58/72/80 mm), alignment, header/footer text, **logo on top** (toggle + height in px), name, retailer, date, bold total, **barcode** and **QR code** (size + optional prefix). Live preview and *Print test ticket*. |
-| **Promotions** | Create promotions based on triggers (e.g. min. 3 plays, or min. distinct games). When a ticket qualifies, a unique 6-digit (configurable) code is printed under the plays with a label and instruction (e.g. visit www.shocolottery.com). Live ticket preview per promotion. |
+| **Promotions** | Create promotions with **game scope** (all games or selected games only) and triggers: **min. plays**, **min. distinct games**, or **min. purchase amount**. When a ticket qualifies, a unique code (4–10 digits) is printed under the plays with label + instruction. Live ticket preview per promotion. |
 | **Results & winners** | Enter 1st/2nd/3rd numbers (tickets settle automatically). See per draw how many tickets played, how many won and prizes; list of winning tickets with a **Pay** button; paid vs unpaid totals. |
 | **Reports** | Pick dates: tickets sold, cancelled, plays, sales, commission, prizes won/paid, **unpaid prize liability**, **open exposure** (worst case on undrawn plays) and net - by retailer and by game. Print or download CSV. |
 | **Retailers** | Edit name, commission %, active; add retailers. |
@@ -55,8 +55,17 @@ automation:
         data: {message: "Winner {{ trigger.event.data.ticket_id }} pays {{ trigger.event.data.prize }}"}
 ```
 
-## Promotions (v0.7+)
-Enable a promotion in **Back office → Promotions**. Example: trigger **Min. plays = 3**, 6-digit code, label *Qualified for promotion*, instruction *Visit www.shocolottery.com and check if you have won*. On **Send & Print**, if the ticket has ≥3 plays, the receipt shows the promo block under the plays (dashed box, code, instruction). Codes are unique per ticket and stored on the ticket record.
+## Promotions (v0.7.1+)
+Enable a promotion in **Back office → Promotions**.
 
-## Known limits (v0.7)
+1. **Games** – leave all unchecked to count the whole ticket, or tick specific games so only those lines count.
+2. **Trigger**
+   - **Min. plays** – e.g. 3 lines of the selected games
+   - **Min. distinct games** – e.g. play at least 2 different selected games
+   - **Min. purchase amount** – e.g. stake of selected games ≥ 10.00
+3. **Code** – 4–10 digit unique number printed on the ticket with your label and instruction (e.g. visit www.shocolottery.com).
+
+On **Send & Print**, qualifying tickets get the promo block under the plays. Codes are unique per ticket and stored on the ticket record. A bad promotion definition never blocks a sale.
+
+## Known limits (v0.7.1)
 Cut-off uses HA local time. A ticket becomes payable once all its draws are settled. Receipts print via the browser print dialog (use kiosk-printing for thermal printers). Data stored in `.storage/lottery_pos.data`; back it up. Promotion win checking is external (your website); this POS only issues the code on the ticket.
