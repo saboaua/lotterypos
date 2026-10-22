@@ -18,7 +18,7 @@ button{border:0;border-radius:14px;padding:10px 14px;background:var(--key);font-
 .nav button.on{background:linear-gradient(135deg,var(--pri),var(--pri2));color:#fff;box-shadow:0 6px 18px #4f46e566}.nav ha-icon{--mdc-icon-size:26px}
 .logo{width:60px;height:60px;border-radius:18px;background:#1b2440;color:#fff;font-weight:800;font-size:20px;display:grid;place-items:center;overflow:hidden;margin-bottom:10px}.logo img{max-width:100%;max-height:100%}
 .top{display:flex;gap:10px;align-items:center;padding:12px 16px;flex-wrap:wrap}
-.brand{font-weight:800;font-size:22px;letter-spacing:-.5px;margin-right:auto}
+.brand{font-weight:800;font-size:22px;letter-spacing:-.5px;white-space:nowrap}
 .kpi{background:var(--card);border-radius:14px;padding:6px 14px;box-shadow:var(--sh);line-height:1.15}.kpi span{display:block;font-size:11px;color:var(--mut);text-transform:uppercase;letter-spacing:.6px}.kpi b{font-size:17px}
 .top input,.top select{height:44px;border:1px solid var(--line);background:var(--card);border-radius:14px;padding:0 12px}#scan{width:240px}
 .ic{width:44px;height:44px;padding:0;display:grid;place-items:center;background:var(--card);box-shadow:var(--sh)}
@@ -75,7 +75,8 @@ table{width:100%;border-collapse:collapse;font-size:13px}td,th{padding:9px 6px;b
 .gl{display:grid;grid-template-columns:repeat(auto-fill,minmax(360px,1fr));gap:12px}.gcard{border:2px solid var(--line);border-left:8px solid var(--c);border-radius:16px;padding:12px}
 .gcard label,.office label{font-size:12px;color:var(--mut);display:flex;gap:4px;align-items:center}.chip{background:var(--key);border-radius:999px;padding:4px 10px}
 .ghost{background:var(--key)!important;color:var(--ink)!important}.dng{color:var(--bad)!important}
-@media(max-width:900px){.main{grid-template-columns:1fr}.kpi{display:none}.acts{grid-template-columns:repeat(4,1fr)}}
+.top .ticker{flex:1;margin:0;height:44px;min-width:180px}.top .tk{line-height:44px;font-size:22px}
+@media(max-width:900px){.top .ticker{order:10;flex-basis:100%}.main{grid-template-columns:1fr}.kpi{display:none}.acts{grid-template-columns:repeat(4,1fr)}}
 @media(max-width:620px){.shell{flex-direction:column-reverse}.nav{width:100%;flex-direction:row;justify-content:space-around;padding:6px}.nav .logo{display:none}.nav button{width:auto;flex:1}#scan{width:100%}}
 `;
 
@@ -110,12 +111,12 @@ class LotteryPosPanel extends HTMLElement{
     const nav=items.filter(i=>i[3]).map(i=>`<button class="${s.tab===i[0]?"on":""}" data-a="tab" data-v="${i[0]}"><ha-icon icon="${i[1]}"></ha-icon>${i[2]}</button>`).join("");
     const body=s.tab==="sell"?this.sellHTML():`<div class="office">${s.tab==="results"?this.resultsHTML():s.tab==="reports"?this.reportsHTML():this.setupHTML()}</div>`;
     this.shadowRoot.innerHTML=`<style>${CSS}</style><div class="shell"><nav class="nav"><div class="logo">${st.logo?`<img src="${st.logo}">`:esc((st.name||"L").slice(0,2).toUpperCase())}</div>${nav}</nav><div class="content"><div class="top">
-      <span class="brand">${esc(st.name)}</span>
+      <span class="brand">${esc(st.name)}</span>${this.tickerHTML()||`<span style="flex:1"></span>`}
       <div class="kpi"><span>Sales today</span><b>${d.currency} ${fmt(d.summary.sales_today)}</b></div><div class="kpi"><span>Tickets</span><b>${d.summary.tickets_today}</b></div>
       <input id="scan" placeholder="Scan ticket…" value="${esc(s.scan)}" inputmode="numeric">
       <button class="ic" data-a="replay" title="Replay last ticket"><ha-icon icon="mdi:replay"></ha-icon></button>
       <select id="ret">${d.retailers.map(r=>`<option value="${r.id}" ${r.id===s.retailer?"selected":""}>${r.name}</option>`).join("")}</select>
-      <button class="ic" data-a="theme" title="Dark / light"><ha-icon icon="${s.dark?"mdi:weather-sunny":"mdi:weather-night"}"></ha-icon></button></div>${this.tickerHTML()}${body}</div></div>`;
+      <button class="ic" data-a="theme" title="Dark / light"><ha-icon icon="${s.dark?"mdi:weather-sunny":"mdi:weather-night"}"></ha-icon></button></div>${body}</div></div>`;
     const q=x=>this.shadowRoot.querySelector(x);
     q("#scan").oninput=e=>s.scan=e.target.value;
     q("#scan").onkeydown=e=>{if(e.key==="Enter")this.scanned(e.target.value.trim())};
