@@ -106,7 +106,7 @@ button{border:0;border-radius:14px;padding:10px 14px;background:var(--key);font-
 .office{padding:0 16px 16px;overflow:auto;display:grid;gap:16px;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));align-content:start}
 .office h3{margin:0 0 12px}.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px}
 .office input:not([type=color]):not([type=file]):not([type=checkbox]),.office select{height:42px;border:1px solid var(--line);background:var(--key);border-radius:12px;padding:0 12px}
-.office button:not(.ghost){background:linear-gradient(135deg,var(--pri),var(--pri2));color:#fff}
+.office button:not(.ghost):not(.glist-head):not(.rlist-head):not(.st){background:linear-gradient(135deg,var(--pri),var(--pri2));color:#fff}
 .prev{max-height:64px;max-width:180px;border:1px dashed var(--line);border-radius:12px;padding:4px}
 .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin:6px 0 14px}.kc{background:var(--key);border-radius:16px;padding:12px}.kc span{font-size:11px;color:var(--mut);text-transform:uppercase}.kc b{display:block;font-size:22px}
 .pos{color:var(--ok)}.neg{color:var(--bad)}
@@ -132,7 +132,7 @@ table{width:100%;border-collapse:collapse;font-size:13px}td,th{padding:9px 6px;b
 .subtabs{display:flex;gap:8px;padding:0 16px 12px;overflow:auto}.subtabs button{display:flex;gap:6px;align-items:center;white-space:nowrap;background:var(--card);box-shadow:var(--sh)}
 .subtabs button.on{background:linear-gradient(135deg,var(--pri),var(--pri2));color:#fff}.subtabs ha-icon{--mdc-icon-size:20px}
 .paper{background:#fff;color:#000;padding:10px 4px;margin:0 auto;box-shadow:0 4px 18px #0003;border-radius:4px;max-width:100%;overflow:hidden}
-.st{padding:2px 9px;border-radius:999px;font-size:11px;font-weight:700}.st.paid{background:#16a34a22;color:#15803d}.st.unpaid{background:#e11d4822;color:#be123c}.st.pending{background:#f59e0b33;color:#b45309}
+.st{padding:3px 10px;border-radius:999px;font-size:11px;font-weight:700;display:inline-flex;align-items:center;gap:6px;white-space:nowrap}.st::before{content:'';width:8px;height:8px;border-radius:50%;background:currentColor;flex-shrink:0}.st.paid{background:#16a34a22;color:#15803d}.st.unpaid{background:#e11d4822;color:#be123c}.st.pending{background:#f59e0b33;color:#b45309}.st.active{background:#16a34a22;color:#15803d}.st.inactive{background:#e11d4822;color:#be123c}
 .note{font-size:12px;color:var(--mut);margin:6px 0}.office h4{margin:16px 0 6px}
 @media(max-width:900px){.top .ticker{order:10;flex-basis:100%}.main{grid-template-columns:1fr}.kpi{display:none}.acts{grid-template-columns:repeat(4,1fr)}}
 
@@ -156,7 +156,7 @@ table{width:100%;border-collapse:collapse;font-size:13px}td,th{padding:9px 6px;b
 .fmt-panel h5{margin:0 0 6px;font-size:12px;color:var(--mut);text-transform:uppercase;letter-spacing:.05em}
 .glist{display:flex;flex-direction:column;gap:8px}
 .glist-item{border:1px solid var(--line);border-radius:16px;background:var(--card);overflow:hidden;box-shadow:var(--sh)}
-.glist-head{display:flex;align-items:center;gap:12px;padding:12px 14px;cursor:pointer;width:100%;text-align:left;background:transparent;color:var(--ink)}
+.glist-head{display:flex;align-items:center;gap:12px;padding:12px 14px;cursor:pointer;width:100%;text-align:left;background:var(--card)!important;color:var(--ink)!important}
 .glist-head:hover{background:var(--key)}
 .glist-head .dot{width:14px;height:14px;border-radius:50%;flex-shrink:0}
 .glist-head .meta{flex:1;min-width:0}
@@ -180,7 +180,7 @@ table{width:100%;border-collapse:collapse;font-size:13px}td,th{padding:9px 6px;b
 .glist{display:flex;flex-direction:column;gap:10px}
 .glist-item{border:1px solid var(--line);border-radius:18px;background:var(--card);overflow:hidden;box-shadow:var(--sh);transition:box-shadow .18s,border-color .18s}
 .glist-item.open{border-color:color-mix(in srgb,var(--pri) 45%,var(--line));box-shadow:0 10px 28px color-mix(in srgb,var(--pri) 18%,transparent)}
-.glist-head{display:flex;align-items:center;gap:12px;padding:14px 16px;cursor:pointer;width:100%;text-align:left;background:transparent;color:var(--ink);border:0;font:inherit}
+.glist-head{display:flex;align-items:center;gap:12px;padding:14px 16px;cursor:pointer;width:100%;text-align:left;background:var(--card)!important;color:var(--ink)!important;border:0;font:inherit;box-shadow:none}
 .glist-head:hover{background:var(--key)}
 .glist-item.open .glist-head{background:linear-gradient(135deg,color-mix(in srgb,var(--pri) 10%,var(--card)),var(--card))}
 .glist-head .dot{width:16px;height:16px;border-radius:50%;flex-shrink:0;box-shadow:0 0 0 3px color-mix(in srgb,var(--pri) 12%,transparent)}
@@ -220,7 +220,7 @@ table{width:100%;border-collapse:collapse;font-size:13px}td,th{padding:9px 6px;b
 .glist-toolbar h3{margin:0}
 .rlist{display:flex;flex-direction:column;gap:10px}
 .rlist-item{border:1px solid var(--line);border-radius:16px;background:var(--card);overflow:hidden;box-shadow:var(--sh)}
-.rlist-head{display:flex;align-items:center;gap:12px;padding:14px 16px;cursor:pointer;width:100%;text-align:left;background:transparent;color:var(--ink);border:0}
+.rlist-head{display:flex;align-items:center;gap:12px;padding:14px 16px;cursor:pointer;width:100%;text-align:left;background:var(--card)!important;color:var(--ink)!important;border:0;font:inherit;box-shadow:none}
 .rlist-head:hover{background:var(--key)}
 .rlist-head .meta{flex:1;min-width:0}
 .rlist-head .meta b{display:block;font-size:15px}
@@ -229,6 +229,17 @@ table{width:100%;border-collapse:collapse;font-size:13px}td,th{padding:9px 6px;b
 .rlist-body .field-grid{grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px 14px}
 .rlist-body .field-grid input,.rlist-body .field-grid select{width:100%}
 .rlist-body .btn-row{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px}
+.rmap{margin-top:16px;border:1px solid var(--line);border-radius:16px;background:var(--key);padding:12px;overflow:hidden}
+.rmap h4{margin:0 0 8px;font-size:14px;display:flex;align-items:center;gap:8px}
+.rmap svg{width:100%;max-height:340px;display:block}
+.rmap .pin{cursor:pointer}
+.rmap .pin circle{stroke:#fff;stroke-width:1.5}
+.rmap .pin.active circle{fill:var(--ok)}
+.rmap .pin.inactive circle{fill:var(--bad);opacity:.7}
+.rmap .legend{display:flex;gap:14px;flex-wrap:wrap;margin-top:8px;font-size:12px;color:var(--mut)}
+.rmap .legend i{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:4px;vertical-align:middle}
+.rmap .legend .on{background:var(--ok)}.rmap .legend .off{background:var(--bad)}
+
 .sched-list{display:flex;flex-direction:column;gap:10px;margin:10px 0}
 .sched-row{border:1px solid var(--line);border-radius:14px;padding:12px;background:var(--key);display:flex;flex-direction:column;gap:8px}
 .sched-row .row{margin:0}
@@ -300,7 +311,7 @@ class LotteryPosPanel extends HTMLElement{
     if(!admin&&s.tab!=="sell")s.tab="sell";
     const items=[["sell","mdi:cash-register","Sell",1],["office","mdi:cog","Back office",admin]];
     const nav=items.filter(i=>i[3]).map(i=>`<button class="${s.tab===i[0]?"on":""}" data-a="tab" data-v="${i[0]}"><ha-icon icon="${i[1]}"></ha-icon>${i[2]}</button>`).join("");
-    const body=s.tab==="sell"?this.sellHTML():`${this.subTabs()}<div class="office">${this.officeBody()}</div>`;
+    const body=(s.tab==="sell"?this.sellHTML():`${this.subTabs()}<div class="office">${this.officeBody()}</div>`)+(this._modal||"");
     this.shadowRoot.innerHTML=`<style>${CSS}</style><div class="shell"><nav class="nav"><div class="logo">${st.logo?`<img src="${st.logo}">`:esc((st.name||"L").slice(0,2).toUpperCase())}</div>${nav}</nav><div class="content"><div class="top">
       <span class="brand">${esc(st.name)}</span>${this.tickerHTML()||`<span style="flex:1"></span>`}
       <div class="kpi"><span>Sales today</span><b>${d.currency} ${fmt(d.summary.sales_today)}</b></div><div class="kpi"><span>Tickets</span><b>${d.summary.tickets_today}</b></div>
@@ -435,7 +446,7 @@ class LotteryPosPanel extends HTMLElement{
     this._sig=d.games.map(g=>this.cd(g).open?1:0).join("");
     const ok=this.allowedBTs();if(ok.length&&!ok.find(b=>b.key===s.bt)){s.bt=ok[0].key;s.num=s.num.slice(0,ok[0].digits||this.gameDigits(this.primaryGame()))}
     const games=d.games.map(g=>{const c=this.cd(g);const fmt=this.gameFormat(g);const tag=fmt==="digit"?`${g.digits||4}d`:fmt==="whe"?"1–36":fmt;return `<button class="game ${s.sel.includes(g.id)?"on":""} ${c.open?"":"closed"}" style="--c:${g.color}" data-a="game" data-v="${g.id}"><span class="gi">${g.logo?`<img src="${g.logo}">`:esc(g.name[0])}</span><b>${esc(g.name)}</b><small class="fmt-tag">${tag}</small><small>Draw ${g.draw_time}${g.draw_days?.length&&g.draw_days.length<7?" · "+g.draw_days.map(i=>DAYS[i]).join(" "):""}</small><small data-cd="${g.id}">${c.txt}</small><span class="chk">✓</span></button>`}).join("");
-    const acts=[["quick","mdi:dice-multiple","Quick pick"],["last","mdi:receipt-text-outline","Último"],["copy","mdi:content-copy","Copia"],["clear","mdi:delete-sweep-outline","Clear"],["cancel","mdi:cancel","Cancel"],["redeem","mdi:cash-check","Redeem"],["results","mdi:printer","Resultado"],["report1","mdi:file-chart-outline","Report"]];
+    const acts=[["quick","mdi:dice-multiple","Quick pick"],["last","mdi:receipt-text-outline","Último"],["copy","mdi:content-copy","Copia"],["clear","mdi:delete-sweep-outline","Clear"],["cancel","mdi:cancel","Cancel"],["redeem","mdi:cash-check","Redeem"],["results","mdi:printer","Resultado"],["report1","mdi:file-chart-outline","My report"],["clerks","mdi:account-group-outline","Clerks"],["support","mdi:lifebuoy","Support"]];
     return `<div class="main"><section class="left card">
     <div class="games">${games}</div>
     <div class="ctl"><input type="date" id="date" value="${s.date}" min="${today()}"><div class="bts">${ok.map(b=>`<button class="bt ${b.key===s.bt?"on":""}" data-a="bt" data-v="${b.key}">${b.label}</button>`).join("")}</div></div>
@@ -654,7 +665,7 @@ class LotteryPosPanel extends HTMLElement{
         <span class="rnum">#${esc(r.number||"—")}</span>
         <span class="meta"><b>${esc(r.name||"Retailer")}</b>
           <small>${person?esc(person)+" · ":""}${r.phone?esc(r.phone)+" · ":""}Sell ${cs}% · Redeem ${cr}% · ${r.active!==false?"Active":"Off"}</small></span>
-        ${r.active!==false?`<span class="st paid">Active</span>`:`<span class="st unpaid">Off</span>`}
+        ${r.active!==false?`<span class="st active">Active</span>`:`<span class="st inactive">Disabled</span>`}
         <ha-icon icon="${open?"mdi:chevron-up":"mdi:chevron-down"}"></ha-icon>
       </button>`;
       const body=open?`<div class="rlist-body">
@@ -674,11 +685,46 @@ class LotteryPosPanel extends HTMLElement{
       </div>`:"";
       return `<div class="rlist-item ${open?"open":""}">${head}${body}</div>`;
     }).join("")||`<div class="empty">No retailers yet</div>`;
+    const map = this.retailersMapHTML(d.all_retailers||[]);
     return `<div class="card" style="grid-column:1/-1">
       <div class="glist-toolbar"><h3>Retailers</h3>
         <button type="button" data-a="openaddret"><ha-icon icon="mdi:plus"></ha-icon> Add retailer</button></div>
-      <p class="note">Tap a retailer to expand contact details and commission. Collapsed list stays easy to scan.</p>
+      <p class="note">Tap a retailer to expand contact details and commission. Collapsed list stays easy to scan. Green = Active, Red = Disabled.</p>
+      ${map}
       <div class="rlist">${list}</div></div>`}
+  retailersMapHTML(retailers){
+    // Simple projected SVG of Aruba (approx bounds)
+    const latMin=12.40, latMax=12.62, lngMin=-70.07, lngMax=-69.86;
+    const W=420, H=280, pad=18;
+    const proj=(lat,lng)=>{
+      const x=pad+((lng-lngMin)/(lngMax-lngMin))*(W-2*pad);
+      const y=pad+((latMax-lat)/(latMax-latMin))*(H-2*pad);
+      return [x,y];
+    };
+    // Simplified Aruba outline (relative path)
+    const outline="M 80,40 L 120,28 L 180,22 L 240,30 L 300,55 L 340,95 L 360,140 L 355,180 L 330,220 L 280,250 L 220,255 L 160,245 L 110,220 L 75,180 L 60,130 L 55,90 Z";
+    const pins=retailers.filter(r=>r.lat!=null&&r.lng!=null).map(r=>{
+      const [x,y]=proj(+r.lat,+r.lng);
+      const on=r.active!==false;
+      return `<g class="pin ${on?"active":"inactive"}" data-a="editret" data-v="${esc(r.id)}">
+        <circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="7" fill="${on?"#10b981":"#f43f5e"}"/>
+        <title>#${esc(r.number||"")} ${esc(r.name||"")}\n${esc(r.address||"")}</title>
+      </g>`;
+    }).join("");
+    const nOn=retailers.filter(r=>r.active!==false).length;
+    const nOff=retailers.length-nOn;
+    return `<div class="rmap">
+      <h4><ha-icon icon="mdi:map-marker-radius"></ha-icon> Aruba retailer map</h4>
+      <svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Aruba retailer distribution">
+        <rect width="${W}" height="${H}" fill="#0ea5e910" rx="12"/>
+        <path d="${outline}" fill="#6366f122" stroke="#6366f1" stroke-width="2"/>
+        <text x="90" y="120" font-size="11" fill="var(--mut)" opacity=".7">Oranjestad</text>
+        <text x="300" y="200" font-size="11" fill="var(--mut)" opacity=".7">San Nicolas</text>
+        <text x="200" y="50" font-size="11" fill="var(--mut)" opacity=".7">Noord / Palm Beach</text>
+        ${pins}
+      </svg>
+      <div class="legend"><span><i class="on"></i>Active (${nOn})</span><span><i class="off"></i>Disabled (${nOff})</span><span>Total ${retailers.length}</span></div>
+    </div>`}
   addRetailerModal(){return `<div class="modal-bg" data-a="closeaddret"><div class="modal" onclick="event.stopPropagation()">
     <h3>Add retailer</h3>
     <div class="field-grid">
@@ -1082,6 +1128,11 @@ class LotteryPosPanel extends HTMLElement{
           <button type="button" class="ghost" data-a="rmjprize">✕</button>`;
         box.appendChild(row);break}
       case "tab":{s.tab=ds.v;if(ds.v==="sell"){s.sel=[];s.balls=[];s.mega="";s.symbols=[];s.num="";s.amt="";s.field="num"}this.render();break}
+      case "closemodal":{this._modal=null;this.render();break}
+      case "addclerkdemo":{this.toast("Clerk added (demo — wire to API)");this._modal=null;this.render();break}
+      case "sendsupport":{const sub=this.shadowRoot.querySelector("#sup-sub")?.value||"",body=this.shadowRoot.querySelector("#sup-body")?.value||"";
+        if(!sub.trim())return this.toast("Enter a subject",1);
+        this.toast("Ticket submitted to operator");this._modal=null;this.render();break}
       case "game":{
         const ng=s.data.all_games.find(g=>g.id===ds.v);
         if(!ng)break;
@@ -1145,7 +1196,9 @@ class LotteryPosPanel extends HTMLElement{
       case "cancel":{const id=await this.modal({title:"Cancel ticket",input:"Scan or type ticket number",ok:"Cancel ticket"});if(!id)break;const t=await this.call("cancel",{ticket_id:(String(id).match(/\d{12,}$/)||[String(id)])[0]});if(t){this.print(this.receipt(t,"CANCELLATION RECEIPT"));this.toast("Ticket cancelled")}break}
       case "redeem":{const id=await this.modal({title:"Pay winner",input:"Scan or type ticket number",ok:"Check ticket"});if(id)this.scanned(id);break}
       case "results":{const r=await this.call("draw_results",{date:s.date});if(r)this.print(`<html><body style="font:13px monospace;width:72mm"><h3>RESULTADO ${s.date}</h3>${r.map(x=>`<p><b>${x.game}</b><br>${x.numbers.join(" - ")}</p>`).join("")||"No results yet"}</body></html>`);break}
-      case "report1":{const t=today(),r=await this.call("report",{date_from:t,date_to:t});if(r)this.print(this.reportHTML(r));break}
+      case "report1":{const t=today(),r=await this.call("report",{date_from:t,date_to:t,retailer_id:s.retailer||undefined});if(r)this.print(this.reportHTML(r));break}
+      case "clerks":{this.toast("Clerks: manage POS operators for this retailer (demo)");this.showClerksModal();break}
+      case "support":{this.showSupportModal();break}
       case "addsess":{
         const g=s.data.all_games.find(x=>x.id===ds.v);if(!g)break;
         g.sessions=g.sessions||[];
@@ -1321,6 +1374,30 @@ class LotteryPosPanel extends HTMLElement{
     else if(t.status==="cancelled")this.toast("Ticket was cancelled",1);
     else if(t.status==="lost"){this.load(t);this.toast("Not a winner - lines loaded to replay")}
     else{this.load(t);this.toast("Draw pending - lines loaded to replay")}}
+  showClerksModal(){
+    const s=this.s,rid=s.retailer,ret=(s.data.retailers||[]).find(r=>r.id===rid)||{};
+    const clerks=ret.clerks||[{id:"c1",name:"Operator 1",pin:"****",active:true}];
+    const rows=clerks.map(c=>`<tr><td>${esc(c.name)}</td><td>${c.active?"Active":"Off"}</td><td><button class="ghost" data-a="noop">Edit</button></td></tr>`).join("");
+    const html=`<div class="modal" data-a="closemodal"><div class="mbox" style="width:min(420px,94vw);text-align:left" onclick="event.stopPropagation()">
+      <h3>Clerks · ${esc(ret.name||"Retailer")}</h3>
+      <p class="note">POS operators for this shop. Owner (back office) manages games & promos; retailers manage clerks and local reports.</p>
+      <table><tr><th>Name</th><th>Status</th><th></th></tr>${rows||"<tr><td colspan=3>No clerks yet</td></tr>"}</table>
+      <div class="mrow" style="margin-top:14px"><button class="ghost" data-a="closemodal">Close</button><button data-a="addclerkdemo">Add clerk</button></div>
+    </div></div>`;
+    this._modal=html;this.render();
+  }
+  showSupportModal(){
+    const html=`<div class="modal" data-a="closemodal"><div class="mbox" style="width:min(420px,94vw);text-align:left" onclick="event.stopPropagation()">
+      <h3>Support ticket</h3>
+      <p class="note">Report POS issues to the lottery operator (printer, network, payout dispute).</p>
+      <label style="display:block;font-size:12px;color:var(--mut);margin:8px 0 4px">Subject</label>
+      <input id="sup-sub" placeholder="e.g. Printer offline" style="width:100%;height:42px;border:1px solid var(--line);border-radius:12px;padding:0 12px;background:var(--key);margin-bottom:10px">
+      <label style="display:block;font-size:12px;color:var(--mut);margin:0 0 4px">Details</label>
+      <textarea id="sup-body" rows="4" style="width:100%;border:1px solid var(--line);border-radius:12px;padding:10px;background:var(--key);font:inherit;resize:vertical"></textarea>
+      <div class="mrow" style="margin-top:14px"><button class="ghost" data-a="closemodal">Cancel</button><button data-a="sendsupport">Submit ticket</button></div>
+    </div></div>`;
+    this._modal=html;this.render();
+  }
   load(t){const s=this.s;s.tab="sell";s.editIdx=null;s.lines=t.lines.map(l=>({game:l.game,bet_type:l.bet_type,number:l.number,amount:l.amount,date:l.date<today()?s.date:l.date,symbols:l.symbols,balls:l.balls,mega:l.mega,format:l.format}));this.render();this.toast(`Replay: ${s.lines.length} line(s) loaded`)}
 
   docHTML(inner,d){return `<html><head><style>@page{margin:0}body{margin:0;padding:2mm;width:${d.width}mm}</style></head><body>${inner}</body></html>`}

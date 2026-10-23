@@ -14,7 +14,7 @@ from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
 
-from .const import (DEFAULT_BET_TYPES, DEFAULT_GAMES, DEFAULT_PROMOTIONS, DOMAIN,
+from .const import (DEFAULT_BET_TYPES, DEFAULT_GAMES, DEFAULT_PROMOTIONS, DEFAULT_RETAILERS, DOMAIN,
                     PLAY_WHE_MARKS, SIGNAL_UPDATE, STORAGE_KEY, STORAGE_VERSION, TICKET_DEFAULTS, ZODIAC_SYMBOLS)
 
 
@@ -34,7 +34,7 @@ class LotteryStore:
             data = {
                 "games": copy.deepcopy(DEFAULT_GAMES),
                 "bet_types": copy.deepcopy(DEFAULT_BET_TYPES),
-                "retailers": [{"id": "main", "number": "001", "name": "Main Shop", "first_name": "", "last_name": "", "address": "", "phone": "", "commission": 10.0, "commission_sell": 10.0, "commission_redeem": 2.0, "active": True}],
+                "retailers": copy.deepcopy(DEFAULT_RETAILERS),
                 "tickets": {}, "results": {}, "seq": 0,
                 "promotions": copy.deepcopy(DEFAULT_PROMOTIONS),
             }
