@@ -172,7 +172,8 @@ table{width:100%;border-collapse:collapse;font-size:13px}td,th{padding:9px 6px;b
 .sess-sel button.closed{opacity:.4;filter:grayscale(.6)}
 .whe-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(88px,1fr));gap:6px;margin:8px 0 4px;max-height:280px;overflow:auto}
 .wchip{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;min-height:56px;padding:6px 4px;border-radius:12px;border:2px solid var(--line);background:var(--key);cursor:pointer;font-weight:700;color:var(--ink)}
-.wchip .wn{font-size:18px;font-weight:900;line-height:1}
+.wchip .we{font-size:22px;line-height:1}
+.wchip .wn{font-size:15px;font-weight:900;line-height:1}
 .wchip .wl{font-size:10px;opacity:.85;text-align:center;line-height:1.15;font-weight:600}
 .wchip.on{background:linear-gradient(135deg,var(--pri),var(--pri2));color:#fff;border-color:transparent}
 .jprize-row{display:grid;grid-template-columns:70px 90px 110px 1fr 36px;gap:6px;align-items:center;margin-bottom:6px}
@@ -347,19 +348,24 @@ class LotteryPosPanel extends HTMLElement{
     if(fmt==="whe"){
       const marks=s.data.play_whe_marks||[];
       const cur=s.num?String(parseInt(s.num,10)||""):"";
+      const sel=marks.find(m=>m.num==+cur);
       return `<div class="fmt-panel"><h5>Play Whe · pick a mark 1–36</h5>
         <div class="whe-grid">${marks.map(m=>{
           const on=cur===(m.num+"");
-          return `<button type="button" class="wchip ${on?"on":""}" data-a="whe" data-v="${m.num}"><span class="wn">${String(m.num).padStart(2,"0")}</span><span class="wl">${esc(m.label)}</span></button>`;
+          return `<button type="button" class="wchip ${on?"on":""}" data-a="whe" data-v="${m.num}"><span class="we">${m.emoji||""}</span><span class="wn">${String(m.num).padStart(2,"0")}</span><span class="wl">${esc(m.label)}</span></button>`;
         }).join("")}</div>
-        <span class="note">${cur?`Selected: ${String(cur).padStart(2,"0")} ${esc((marks.find(m=>m.num==+cur)||{}).label||"")}`:"Tap a mark or type 1–36 on the keypad"}</span></div>`;
+        <span class="note">${sel?`Selected: ${sel.emoji||""} ${String(sel.num).padStart(2,"0")} ${esc(sel.label)}`:"Tap a mark or type 1–36 on the keypad"}</span></div>`;
     }
     if(fmt==="zodiac"){
       const zs=this.zodiacList();
-      const allOn=s.allZodiac||(s.symbols.length&&s.symbols.length===zs.length);
+      const nSel=s.allZodiac?zs.length:(s.symbols||[]).length;
+      const allOn=s.allZodiac||((s.symbols||[]).length&&(s.symbols||[]).length===zs.length);
+      const unit=parseFloat(s.amt)||0;
+      const costHint=nSel>0&&unit>0?` · cost ${this.s.data.currency} ${(unit*nSel).toFixed(2)} (${nSel}×${unit.toFixed(2)})`:nSel>1?` · each symbol is a separate bet`:"";
       return `<div class="fmt-panel"><h5>Zodiac symbols · ${g.digits||2}-digit number</h5>
-        <div class="row"><button class="ghost ${allOn?"on":""}" data-a="zodall">All symbols</button><button class="ghost" data-a="zodclear">Clear</button><span class="note">${s.symbols.length||0} selected</span></div>
-        <div class="zodiac-grid">${zs.map(z=>`<button type="button" class="zchip ${(s.symbols||[]).includes(z.id)?"on":""}" data-a="zod" data-v="${z.id}"><span class="em">${z.emoji||""}</span>${esc(z.label)}</button>`).join("")}</div></div>`;
+        <div class="row"><button class="ghost ${allOn?"on":""}" data-a="zodall">All symbols</button><button class="ghost" data-a="zodclear">Clear</button><span class="note">${nSel} selected${costHint}</span></div>
+        <div class="zodiac-grid">${zs.map(z=>`<button type="button" class="zchip ${(s.symbols||[]).includes(z.id)||s.allZodiac?"on":""}" data-a="zod" data-v="${z.id}"><span class="em">${z.emoji||""}</span>${esc(z.label)}</button>`).join("")}</div>
+        <span class="note">Amount is per symbol: e.g. 1111 + Virgo + Cancer at 1.00 → two plays, total 2.00</span></div>`;
     }
     if(fmt==="jackpot"){
       const mc=+g.main_count||5, mm=+g.main_max||30, mega=+g.mega_count||0, mx=+g.mega_max||15;
@@ -849,9 +855,14 @@ class LotteryPosPanel extends HTMLElement{
     const col=k=>s.data.all_games.find(gg=>gg.id===k)?.color||"#64748b";
     const lineLabel=l=>{
       let base=l.number||"";
-      if(l.format==="whe"||l.mark)base=(l.number||"")+(l.mark?" "+l.mark:"");
-      else if(l.symbols&&l.symbols.length)base=l.number+" · "+l.symbols.join(",");
-      else if(l.balls&&l.balls.length)base=l.balls.join("-")+(l.mega?"+"+l.mega:"");
+      if(l.format==="whe"||l.mark){
+        const mk=(this.s.data.play_whe_marks||[]).find(m=>m.num===parseInt(l.number,10));
+        base=(mk&&mk.emoji?mk.emoji+" ":"")+(l.number||"")+(l.mark?" "+l.mark:(mk?" "+mk.label:""));
+      }else if(l.symbols&&l.symbols.length){
+        const zs=this.s.data.zodiac_symbols||[];
+        const names=l.symbols.map(id=>{const z=zs.find(x=>x.id===id);return z?(z.emoji?z.emoji+" ":"")+z.label:id});
+        base=l.number+" · "+names.join(", ");
+      }else if(l.balls&&l.balls.length)base=l.balls.join("-")+(l.mega?"+"+l.mega:"");
       if(l.session_label||l.session)base+=` · ${l.session_label||l.session}`;
       if((l.draws||1)>1)base+=` ×${l.draws} draws`;
       return base;
@@ -916,7 +927,19 @@ class LotteryPosPanel extends HTMLElement{
       if(s.num.length!==dig)return this.toast(`Needs ${dig}-digit number`,1);
       const syms=s.allZodiac?this.zodiacList().map(z=>z.id):(s.symbols||[]);
       if(!syms.length)return this.toast("Select zodiac symbols or All",1);
-      line.bet_type="zodiac";line.number=s.num;line.symbols=syms;
+      // Amount is per symbol: each symbol becomes its own play
+      const made=syms.map(sym=>({...line,bet_type:"zodiac",number:s.num,symbols:[sym]}));
+      if(s.editIdx!=null){
+        s.lines.splice(s.editIdx,1,...made);
+        s.editIdx=null;s.fresh=null;s.num="";s.field="num";
+        this.toast(made.length>1?`Updated → ${made.length} symbol plays`:"Play updated");
+        return this.render();
+      }
+      const znum=s.num;
+      s.lines.push(...made);
+      s.num="";s.field="num";
+      this.toast(made.length>1?`Added ${znum} × ${made.length} symbols · total ${(amt*made.length).toFixed(2)}`:"Added");
+      return this.paint();
     }else if(fmt==="jackpot"){
       const mc=+g.main_count||5;
       if((s.balls||[]).length!==mc)return this.toast(`Pick ${mc} balls`,1);
