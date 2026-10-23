@@ -210,7 +210,7 @@ class LotteryStore:
         for ln in lines:
             game = self._find("games", "id", ln["game"], "game")
             fmt = game.get("format", "digit")
-            bt_key = ln.get("bet_type") or ("jackpot" if fmt == "jackpot" else "zodiac" if fmt == "zodiac" else None)
+            bt_key = ln.get("bet_type") or ("jackpot" if fmt == "jackpot" else "zodiac" if fmt == "zodiac" else "play_whe" if fmt == "whe" else None)
             if not bt_key:
                 raise LotteryError("Bet type required")
             bt = self._find("bet_types", "key", bt_key, "bet type")
@@ -253,6 +253,20 @@ class LotteryStore:
                         uniq.append(s)
                 line["number"] = num
                 line["symbols"] = uniq
+            elif fmt == "whe":
+                # Play Whe: single mark 1–36
+                num = str(ln.get("number", "")).strip()
+                try:
+                    n = int(num)
+                except (TypeError, ValueError):
+                    n = -1
+                if not (1 <= n <= 36):
+                    raise LotteryError(f"{game['name']} needs a mark from 1 to 36")
+                line["number"] = f"{n:02d}"
+                mark = next((m for m in PLAY_WHE_MARKS if m["num"] == n), None)
+                line["mark"] = mark["label"] if mark else str(n)
+                if mark and mark.get("emoji"):
+                    line["mark_emoji"] = mark["emoji"]
             elif fmt == "jackpot":
                 main_count = int(game.get("main_count") or 5)
                 main_max = int(game.get("main_max") or 30)
