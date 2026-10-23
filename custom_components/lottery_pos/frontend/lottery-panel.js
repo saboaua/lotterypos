@@ -311,13 +311,10 @@ class LotteryPosPanel extends HTMLElement{
       const balls=s.balls||[];
       const pool=Number(g.jackpot_current||g.jackpot_min||0);
       const prices=(g.fixed_prices&&g.fixed_prices.length)?g.fixed_prices:[2,3,4,5];
-      const curAmt=parseFloat(s.amt);
       return `<div class="fmt-panel"><h5>Jackpot · pick ${mc} from 01–${String(mm).padStart(2,"0")}${mega?` + mega 01–${String(mx).padStart(2,"0")}`:""} · pool <b>${this.s.data.currency} ${pool.toFixed(0)}</b></h5>
         <div class="ball-grid">${Array.from({length:mm},(_,i)=>{const v=String(i+1).padStart(2,"0");return `<button type="button" class="bchip ${balls.includes(v)?"on":""}" data-a="ball" data-v="${v}">${v}</button>`}).join("")}</div>
         ${mega?`<h5>Mega ball</h5><div class="ball-grid">${Array.from({length:mx},(_,i)=>{const v=String(i+1).padStart(2,"0");return `<button type="button" class="bchip mega ${s.mega===v?"on":""}" data-a="mega" data-v="${v}">${v}</button>`}).join("")}</div>`:""}
-        <h5>Fixed price</h5>
-        <div class="price-sel">${prices.map(pr=>`<button type="button" class="${+curAmt===+pr?"on":""}" data-a="preset" data-v="${pr}">${pr}</button>`).join("")}</div>
-        <span class="note">${balls.length}/${mc} main${mega?` · mega ${s.mega||"—"}`:""} · price ${s.amt||"—"}</span></div>`;
+        <span class="note">${balls.length}/${mc} main${mega?` · mega ${s.mega||"—"}`:""} · type price on keypad (${prices.join(", ")})</span></div>`;
     }
     const dig=this.gameDigits(g);
     return `<div class="fmt-panel"><h5>Number game · ${dig} digits (${"0".repeat(dig)}–${"9".repeat(dig)})</h5></div>`;
@@ -345,12 +342,9 @@ class LotteryPosPanel extends HTMLElement{
       <input type="number" id="draws-custom" min="1" max="28" value="${s.draws||1}" style="width:60px;height:36px;border-radius:10px;border:1px solid var(--line);padding:0 8px" title="Custom draws">
       <span class="note">draws · total ×${s.draws||1}</span></div></div>
     <div class="entry"><div id="num" class="disp" data-a="field" data-v="num"></div><div id="amt" class="disp" data-a="field" data-v="amt"></div>${s.editIdx!=null?`<div class="editbar">✎ Editing play ${s.editIdx+1} — type the new number / amount, then press Update</div><button class="add upd" data-a="add">✔ Update play</button><button class="cancel" data-a="canceledit" style="grid-column:1/-1">Cancel edit</button>`:`<button class="add" data-a="add">＋ Add to ticket</button>`}</div>
-    ${(()=>{const g=this.primaryGame();if(!g||this.gameFormat(g)!=="jackpot")return"";
-      const prices=(g.fixed_prices&&g.fixed_prices.length)?g.fixed_prices:[2,3,4,5];
-      const curAmt=parseFloat(s.amt);
-      return `<div class="fmt-panel"><h5>Price</h5><div class="price-sel">${prices.map(pr=>`<button type="button" class="${+curAmt===+pr?"on":""}" data-a="preset" data-v="${pr}">${pr}</button>`).join("")}</div></div>`})()}
     <div class="pads"><div class="pad">${[1,2,3,4,5,6,7,8,9,"CLR",0,"DEL"].map(k=>`<button data-a="key" data-v="${k}">${k}</button>`).join("")}</div>
-      <div class="pre">${PRESETS.map(p=>`<button data-a="preset" data-v="${p}">${p}</button>`).join("")}</div></div>
+      <div class="pre">${(()=>{const g=this.primaryGame();const prices=(g&&this.gameFormat(g)==="jackpot")?((g.fixed_prices&&g.fixed_prices.length)?g.fixed_prices:[2,3,4,5]):PRESETS;
+        return prices.map(p=>`<button data-a="preset" data-v="${p}">${p}</button>`).join("")})()}</div></div>
     <div class="acts">${acts.map(a=>`<button data-a="${a[0]}"><ha-icon icon="${a[1]}"></ha-icon>${a[2]}</button>`).join("")}</div>
   </section><section class="right card"><div class="rhead"><h3>Current ticket</h3><span class="badge" id="cnt">0</span></div><div class="rsub">${s.sel[0]?esc(this.gn(s.sel[0])):"No game"} · tap a game above to switch · ✎ edits a play</div>
     <div id="lines"></div><div class="foot"><div><small>Total</small><div class="tot" id="tot"></div></div><button class="send" data-a="send">Send &amp; Print ▶</button></div></section></div>`}
@@ -675,7 +669,8 @@ class LotteryPosPanel extends HTMLElement{
       const label=gfmt==="zodiac"?`Zodiac ${dig}d`:(bt?bt.label:`${dig} digits`);
       q("#num").innerHTML=`<small>${label}</small>`+Array.from({length:dig||4},(_,i)=>`<span class="dg ${s.num[i]?"f":""}">${s.num[i]||""}</span>`).join("");
     }
-    q("#amt").innerHTML=`<small>Amount ${cur}</small><span class="amtv">${s.amt||"0"}</span>`;
+    const priceHint=(gfmt==="jackpot"&&g)?` · allowed ${(g.fixed_prices||[2,3,4,5]).join("/")}`:"";
+    q("#amt").innerHTML=`<small>Amount ${cur}${priceHint}</small><span class="amtv">${s.amt||"0"}</span>`;
     q("#num").classList.toggle("act",s.field==="num");q("#amt").classList.toggle("act",s.field==="amt");
     const col=k=>s.data.all_games.find(gg=>gg.id===k)?.color||"#64748b";
     const lineLabel=l=>{
@@ -691,10 +686,13 @@ class LotteryPosPanel extends HTMLElement{
 
   onKey(e){const s=this.s;if(!s.data||s.tab!=="sell"||e.composedPath()[0]?.tagName==="INPUT"||e.composedPath()[0]?.tagName==="SELECT")return;
     if(/^\d$/.test(e.key))this.key(e.key);else if(e.key==="Backspace")this.key("DEL");else if(e.key==="Enter"){e.preventDefault();this.add()}else if(e.key==="Tab"){e.preventDefault();s.field=s.field==="num"?"amt":"num";this.paint()}}
-  key(k){const s=this.s,f=s.field,g=this.primaryGame(),fmt=this.gameFormat(g),dig=this.gameDigits(g);
+  key(k){const s=this.s,g=this.primaryGame(),fmt=g?this.gameFormat(g):"digit",dig=g?this.gameDigits(g):4;
+    // Jackpot: number pad always enters the fixed price (amount)
+    if(fmt==="jackpot")s.field="amt";
+    const f=s.field;
     if(s.fresh?.[f]){s.fresh[f]=false;if(k!=="CLR"&&k!=="DEL")s[f]=""}
     if(k==="CLR")s[f]="";else if(k==="DEL")s[f]=s[f].slice(0,-1);
-    else if(f==="num"){if(fmt==="jackpot")return;if(s.num.length<dig)s.num+=k;if(s.num.length===dig)s.field="amt"}
+    else if(f==="num"){if(s.num.length<dig)s.num+=k;if(s.num.length===dig)s.field="amt"}
     else if(s.amt.length<7)s.amt=(s.amt==="0"?"":s.amt)+k;
     this.paint()}
   add(){const s=this.s,bt=this.bt(),amt=parseFloat(s.amt),g=this.primaryGame(),fmt=this.gameFormat(g),dig=this.gameDigits(g);
@@ -758,21 +756,25 @@ class LotteryPosPanel extends HTMLElement{
         // Single-select: tap a game to sell that game only
         if(s.sel.length===1&&s.sel[0]===ds.v)break; // already selected
         s.sel=[ds.v];
-        s.symbols=[];s.balls=[];s.mega="";s.allZodiac=false;s.num="";s.field="num";
+        s.symbols=[];s.balls=[];s.mega="";s.allZodiac=false;s.num="";s.amt="";
+        const ng=s.data.all_games.find(g=>g.id===ds.v);
+        s.field=this.gameFormat(ng)==="jackpot"?"amt":"num";
         const ok=this.allowedBTs();
         if(ok.length)s.bt=ok[0].key;
         this.render();break}
       case "bt":s.bt=ds.v;s.num=s.num.slice(0,this.bt().digits);s.field="num";this.render();break;
       case "field":s.field=ds.v;this.paint();break;
       case "key":this.key(ds.v);break;
-      case "preset":s.amt=ds.v;if(s.fresh)s.fresh.amt=false;s.field="num";this.paint();break;
+      case "preset":{s.amt=String(ds.v);if(s.fresh)s.fresh.amt=false;const g=this.primaryGame();s.field=(g&&this.gameFormat(g)==="jackpot")?"amt":"num";this.paint();break}
       case "add":this.add();break;
-      case "quick":{const g=this.primaryGame(),fmt=this.gameFormat(g);
+      case "quick":{const g=this.primaryGame();if(!s.sel.length||!g)return this.toast("Select a game first",1);const fmt=this.gameFormat(g);
         if(fmt==="jackpot"){
           const mc=+g.main_count||5,mm=+g.main_max||30,pool=Array.from({length:mm},(_,i)=>String(i+1).padStart(2,"0"));
           s.balls=[];while(s.balls.length<mc){const x=pool[Math.floor(Math.random()*pool.length)];if(!s.balls.includes(x))s.balls.push(x)}
           if(+g.mega_count)s.mega=String(1+Math.floor(Math.random()*(+g.mega_max||15))).padStart(2,"0");
-          s.field="amt";this.render();break}
+          const prices=(g.fixed_prices&&g.fixed_prices.length)?g.fixed_prices.map(Number):[2,3,4,5];
+          s.amt=String(prices[Math.floor(Math.random()*prices.length)]);
+          s.field="amt";if(s.fresh)s.fresh.amt=false;this.render();break}
         if(fmt==="zodiac"){const dig=this.gameDigits(g);s.num=Array.from({length:dig},()=>Math.floor(Math.random()*10)).join("");
           s.symbols=[this.zodiacList()[Math.floor(Math.random()*this.zodiacList().length)].id];s.allZodiac=false;s.field="amt";this.render();break}
         const n=this.gameDigits(g)||this.bt()?.digits||4;s.num=Array.from({length:n},()=>Math.floor(Math.random()*10)).join("");s.field="amt";this.paint();break}
