@@ -641,9 +641,16 @@ class LotteryStore:
     def set_ticket_design(self, d: dict) -> dict:
         out = {}
         for k, default in TICKET_DEFAULTS.items():
+            if k == "messages":
+                continue
             v = d.get(k, default)
             try:
-                out[k] = bool(v) if isinstance(default, bool) else int(v) if isinstance(default, int) else str(v)
+                if isinstance(default, bool):
+                    out[k] = bool(v)
+                elif isinstance(default, int):
+                    out[k] = int(v)
+                else:
+                    out[k] = str(v if v is not None else default)
             except (TypeError, ValueError) as err:
                 raise LotteryError(f"Invalid value for {k}") from err
         if out["font"] not in ("mono", "sans", "serif", "condensed") or out["align"] not in ("left", "center"):
@@ -652,7 +659,31 @@ class LotteryStore:
             raise LotteryError("Size out of range")
         if not 20 <= out.get("logo_height", 40) <= 80:
             raise LotteryError("Logo height must be 20-80 px")
-        out["header"], out["footer"], out["qr_prefix"] = out["header"][:120], out["footer"][:200], out["qr_prefix"][:40]
+        out["header"] = out["header"][:120]
+        out["footer"] = out["footer"][:200]
+        out["qr_prefix"] = out["qr_prefix"][:40]
+        out["jackpot_text"] = out.get("jackpot_text", "")[:160]
+        out["jackpot_mode"] = out.get("jackpot_mode") if out.get("jackpot_mode") in ("auto", "manual") else "auto"
+        out["jackpot_game"] = out.get("jackpot_game", "")[:40]
+        # Scheduled ticket messages
+        msgs = d.get("messages", TICKET_DEFAULTS.get("messages", []))
+        if not isinstance(msgs, list):
+            raise LotteryError("messages must be a list")
+        cleaned = []
+        for i, m in enumerate(msgs[:20]):
+            if not isinstance(m, dict):
+                continue
+            text = str(m.get("text") or "").strip()[:200]
+            if not text:
+                continue
+            cleaned.append({
+                "id": str(m.get("id") or secrets.token_hex(4)),
+                "text": text,
+                "enabled": bool(m.get("enabled", True)),
+                "start_at": str(m.get("start_at") or "")[:32],
+                "end_at": str(m.get("end_at") or "")[:32],
+            })
+        out["messages"] = cleaned
         self.data["settings"]["ticket"] = out
         self._save()
         return out

@@ -6,7 +6,7 @@ PANEL_URL = "lottery-pos"
 STATIC_URL = "/lottery_pos_static/lottery-panel.js"
 SIGNAL_UPDATE = f"{DOMAIN}_update"
 PLATFORMS = ["sensor"]
-VERSION = "0.8.5"
+VERSION = "0.8.6"
 
 # Chinese zodiac (common in Caribbean / Asian number games)
 ZODIAC_SYMBOLS = [
@@ -59,6 +59,8 @@ TICKET_DEFAULTS = {
     "show_logo": True, "logo_height": 40, "show_name": True, "show_retailer": True, "show_datetime": True,
     "bold_total": True, "show_barcode": True, "show_qr": False, "qr_size": 28, "qr_prefix": "",
     "show_jackpot": False, "jackpot_mode": "auto", "jackpot_text": "", "jackpot_game": "",
+    "messages": [],  # [{id,text,enabled,start_at,end_at}] scheduled ticket messages
+
 }
 
 DEFAULT_PROMOTIONS = [

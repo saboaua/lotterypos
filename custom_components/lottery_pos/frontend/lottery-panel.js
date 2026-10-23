@@ -223,7 +223,8 @@ class LotteryPosPanel extends HTMLElement{
   async init(){const s=this.s;try{s.dark=localStorage.getItem("lottery_pos_dark")==="1"}catch(e){}
     s.data=await this.ws("state");this._tm=setInterval(()=>this.tick(),30000);s.sel=[s.data.games[0]?.id];s.bt=s.data.bet_types[0]?.key;s.retailer=s.data.retailers[0]?.id;
     this.shadowRoot.addEventListener("click",e=>{const el=e.target.closest("[data-a]");if(!el)return;if(el.dataset.a==="rmprizerow"||el.dataset.a==="rmnprizerow"){const row=el.closest(".p-prize-row,.n-prize-row");if(row){const box=row.parentElement;if(box&&box.querySelectorAll(".p-prize-row,.n-prize-row").length>1)row.remove();else this.toast("Keep at least one prize row",1)}return}
-      if(el.dataset.a==="rmjprize"){const row=el.closest(".jp-row");if(row)row.remove();return}this.act(el.dataset.a,el.dataset)});
+      if(el.dataset.a==="rmjprize"){const row=el.closest(".jp-row");if(row)row.remove();return}
+      if(el.dataset.a==="rmtmsg"){const row=el.closest(".tmsg-row");if(row){const d=this.design();const i=+row.dataset.i;if(d.messages&&!isNaN(i)){d.messages.splice(i,1);this.render()}else row.remove()}return}this.act(el.dataset.a,el.dataset)});
     this.render()}
   bt(){return this.s.data.all_bet_types.find(b=>b.key===this.s.bt)}
   primaryGame(){const s=this.s;return s.data.all_games.find(g=>g.id===s.sel[0])||s.data.games[0]}
@@ -603,9 +604,9 @@ class LotteryPosPanel extends HTMLElement{
       <div style="font-size:1.55em;font-weight:900;letter-spacing:.18em;margin:4px 0">${esc(p.code||"000000")}</div>
       <div style="font-size:0.82em;line-height:1.25;margin-top:4px">${esc(p.instruction||"Visit www.shocolottery.com and check if you have won")}</div>
     </div>`}
-    designDefaults(){return {font:"mono",size:12,width:72,align:"center",header:"",footer:"Good luck!",show_logo:true,logo_height:40,show_name:true,show_retailer:true,show_datetime:true,bold_total:true,show_barcode:true,show_qr:false,qr_size:28,qr_prefix:"",show_jackpot:false,jackpot_mode:"auto",jackpot_text:"",jackpot_game:""}}
+    designDefaults(){return {font:"mono",size:12,width:72,align:"center",header:"",footer:"Good luck!",show_logo:true,logo_height:40,show_name:true,show_retailer:true,show_datetime:true,bold_total:true,show_barcode:true,show_qr:false,qr_size:28,qr_prefix:"",show_jackpot:false,jackpot_mode:"auto",jackpot_text:"",jackpot_game:"",messages:[]}}
   saved(){return {...this.designDefaults(),...(this.s.data.settings.ticket||{})}}
-  design(){return this.s.design||(this.s.design={...this.saved()})}
+  design(){if(this.s.design)return this.s.design;const base=this.saved();this.s.design={...base,messages:(base.messages||[]).map(m=>({...m}))};return this.s.design}
   designCard(){const d=this.design(),chk=(k,l)=>`<label class="chip"><input type="checkbox" class="d-f" data-k="${k}" ${d[k]?"checked":""}> ${l}</label>`,opt=(arr,cur)=>arr.map(a=>`<option value="${a[0]}" ${String(cur)===String(a[0])?"selected":""}>${a[1]}</option>`).join("");
     return `<div class="card"><h3>Ticket layout</h3>
     <div class="row"><label>Font <select class="d-f" data-k="font">${opt([["mono","Monospace (thermal)"],["sans","Sans-serif"],["serif","Serif"],["condensed","Condensed"]],d.font)}</select></label>
@@ -615,14 +616,24 @@ class LotteryPosPanel extends HTMLElement{
     <div class="row">${chk("show_logo","Logo on top")}${chk("show_name","Lottery name")}${chk("show_retailer","Retailer")}${chk("show_datetime","Date &amp; time")}${chk("bold_total","Bold total")}</div>
     <div class="row"><label>Logo height <input class="d-f" data-k="logo_height" type="number" min="20" max="80" value="${d.logo_height||40}" style="width:70px"> px</label>
       <span class="note">Uses the branding logo. Toggle &quot;Logo on top&quot; to show it at the top of every ticket.</span></div>
-    <div class="row"><input class="d-f" data-k="header" placeholder="Header text (under the name)" value="${esc(d.header)}" maxlength="120" style="flex:1"></div>
-    <div class="row"><input class="d-f" data-k="footer" placeholder="Footer text" value="${esc(d.footer)}" maxlength="200" style="flex:1"></div>
+    <div class="row"><input class="d-f" data-k="header" placeholder="Header — supports {date}" value="${esc(d.header)}" maxlength="120" style="flex:1"></div>
+    <div class="row"><input class="d-f" data-k="footer" placeholder="Footer — supports {date}, {name}, {amount}" value="${esc(d.footer)}" maxlength="200" style="flex:1"></div>
     <h3>Jackpot message on ticket</h3>
     <div class="row">${chk("show_jackpot","Print jackpot message")}</div>
     <div class="row"><label>Mode <select class="d-f" data-k="jackpot_mode"><option value="auto" ${d.jackpot_mode!=="manual"?"selected":""}>Automatic (game pool)</option><option value="manual" ${d.jackpot_mode==="manual"?"selected":""}>Manual text</option></select></label>
       <label>Jackpot game <select class="d-f" data-k="jackpot_game"><option value="">First jackpot game</option>${(this.s.data.all_games||[]).filter(g=>(g.format||"")==="jackpot").map(g=>`<option value="${esc(g.id)}" ${d.jackpot_game===g.id?"selected":""}>${esc(g.name)}</option>`).join("")}</select></label></div>
     <div class="row"><input class="d-f" data-k="jackpot_text" placeholder='Template e.g. {name} jackpot is {amount}' value="${esc(d.jackpot_text||"")}" style="flex:1" maxlength="120"></div>
-    <p class="note">Automatic fills {name} and {amount} from the selected jackpot game’s current pool.</p>
+    <p class="note">Placeholders: <code>{name}</code> jackpot game name · <code>{amount}</code> pool · <code>{date}</code> e.g. Friday, October 23, 2026</p>
+    <h3>Scheduled ticket messages</h3>
+    <p class="note">Messages print on the ticket only while the current date/time is inside the window. Leave start/end empty for always-on. Supports the same placeholders.</p>
+    <div id="tmsg-list">${(d.messages||[]).map((m,i)=>`<div class="tmsg-row card" style="padding:10px;margin:8px 0;box-shadow:none" data-i="${i}">
+      <div class="row"><input class="tm-text" value="${esc(m.text||"")}" placeholder="Message text — use {date}, {name}, {amount}" style="flex:1" maxlength="200">
+        <label><input type="checkbox" class="tm-en" ${m.enabled!==false?"checked":""}> On</label>
+        <button type="button" class="ghost" data-a="rmtmsg">✕</button></div>
+      <div class="row"><label>From <input class="tm-start" type="datetime-local" value="${esc((m.start_at||"").slice(0,16))}"></label>
+        <label>Until <input class="tm-end" type="datetime-local" value="${esc((m.end_at||"").slice(0,16))}"></label></div>
+    </div>`).join("")||`<div class="empty" style="padding:12px">No scheduled messages</div>`}</div>
+    <div class="row"><button type="button" class="ghost" data-a="addtmsg">+ Add message</button></div>
     <h3>Scan codes</h3><div class="row">${chk("show_barcode","Barcode (Code 39)")}${chk("show_qr","QR code")}<label>QR size <input class="d-f" data-k="qr_size" type="number" min="15" max="45" value="${d.qr_size}" style="width:70px"> mm</label></div>
     <div class="row"><input class="d-f" data-k="qr_prefix" placeholder="Optional text before the ticket number inside the QR" value="${esc(d.qr_prefix)}" maxlength="40" style="flex:1"></div>
     <p class="note">Barcode scanners and 2D/QR scanners type the code into the scan box on the Sell screen. The ticket number is read from the end of the code, so a prefix is fine.</p>
@@ -633,14 +644,26 @@ class LotteryPosPanel extends HTMLElement{
     const promos=(d.promotions||[]).filter(p=>p.enabled!==false).slice(0,1).map(p=>({id:p.id,name:p.name,code:"1".repeat(p.code_digits||6).replace(/./g,(_,i)=>String((i*3+7)%10)),label:p.label,instruction:p.instruction,url:p.url,prize:p.prize||0}));
     return {id:"261022000112345678",retailer_name:d.retailers[0]?.name||"Retailer",created:new Date(Date.now()-new Date().getTimezoneOffset()*6e4).toISOString(),lines,total:3.5,promotions:promos}}
   refreshPreview(){const p=this.shadowRoot.querySelector("#prev");if(!p)return;const d=this.design();p.style.width=d.width+"mm";p.innerHTML=this.receiptInner(this.sampleTicket(),"TICKET",d)}
-  jackpotTicketMsg(d){if(!d||!d.show_jackpot)return"";
-    const games=(this.s.data.all_games||[]).filter(g=>(g.format||"")==="jackpot");
-    const g=d.jackpot_game?games.find(x=>x.id===d.jackpot_game):games[0];
-    const name=g?g.name:"Jackpot";
+  longDate(dt){const d=dt?new Date(dt):new Date();
+    if(isNaN(d.getTime()))return"";
+    return d.toLocaleDateString("en-US",{weekday:"long",year:"numeric",month:"long",day:"numeric"})}
+  fillTicketPlaceholders(tpl,extra={}){const games=(this.s.data.all_games||[]).filter(g=>(g.format||"")==="jackpot");
+    const d=this.design?this.design():(this.s.data.settings.ticket||{});
+    const g=extra.game||(d.jackpot_game?games.find(x=>x.id===d.jackpot_game):games[0]);
+    const name=g?g.name:(extra.name||"Jackpot");
     const amount=g?Number(g.jackpot_current||g.jackpot_min||0):0;
     const amt=amount.toLocaleString(undefined,{maximumFractionDigits:0});
+    const dateStr=this.longDate();
+    return String(tpl||"").replaceAll("{name}",name).replaceAll("{amount}",amt).replaceAll("{date}",dateStr)}
+  msgActive(m){if(!m||m.enabled===false)return false;
+    const now=Date.now();
+    if(m.start_at){const t=Date.parse(m.start_at);if(!isNaN(t)&&now<t)return false}
+    if(m.end_at){const t=Date.parse(m.end_at);if(!isNaN(t)&&now>t)return false}
+    return true}
+  activeTicketMessages(d){return (d.messages||[]).filter(m=>this.msgActive(m)).map(m=>({...m,text:this.fillTicketPlaceholders(m.text)}))}
+  jackpotTicketMsg(d){if(!d||!d.show_jackpot)return"";
     const tpl=((d.jackpot_mode==="manual"&&(d.jackpot_text||"").trim())?(d.jackpot_text||""):((d.jackpot_text||"").trim()||"{name} jackpot is {amount}"));
-    return tpl.replaceAll("{name}",name).replaceAll("{amount}",amt)}
+    return this.fillTicketPlaceholders(tpl)}
   receiptInner(t,title,d){const st=this.s.data.settings,c=this.s.data.currency,al=d.align==="left"?"left":"center",
       fam={mono:'"Courier New",monospace',sans:"Arial,Helvetica,sans-serif",serif:"Georgia,serif",condensed:'"Arial Narrow","Roboto Condensed",Arial,sans-serif'}[d.font]||"monospace",
       row=l=>`<div style="display:flex;justify-content:space-between;gap:6px"><span>${esc(this.gn(l.game))} ${l.date.slice(5)}</span><span>${l.number} ${esc(this.btl(l.bet_type))}</span><b>${fmt(l.amount)}</b></div>`,
@@ -649,7 +672,7 @@ class LotteryPosPanel extends HTMLElement{
     return `<div style="font:${d.size}px/1.35 ${fam};width:${d.width-4}mm;margin:0 auto;color:#000">`
       +(d.show_logo&&st.logo?`<div style="text-align:${al}"><img src="${st.logo}" style="max-height:${d.logo_height||40}px;max-width:100%"></div>`:"")
       +(d.show_name?`<div style="text-align:${al};font-weight:bold;font-size:${d.size+3}px">${esc(st.name)}</div>`:"")
-      +(d.header?`<div style="text-align:${al}">${esc(d.header)}</div>`:"")
+      +(d.header?`<div style="text-align:${al}">${esc(this.fillTicketPlaceholders(d.header))}</div>`:"")
       +`<div style="text-align:${al};font-weight:bold;margin:4px 0">${esc(title)}</div>`
       +(d.show_retailer?`<div>${esc(t.retailer_name||"")}</div>`:"")+(d.show_datetime?`<div>${t.created.replace("T"," ").slice(0,16)}</div>`:"")
       +hr+t.lines.map(row).join("")+hr
@@ -659,7 +682,8 @@ class LotteryPosPanel extends HTMLElement{
       +(d.show_qr?`<div style="margin-top:8px"><div style="width:${d.qr_size}mm;max-width:100%;margin:0 auto">${qrSVG((d.qr_prefix||"")+t.id)}</div></div>`:"")
       +`<div style="text-align:center;font-size:${Math.max(8,d.size-1)}px">${t.id}</div>`
       +(jp?`<div style="margin-top:6px;padding:4px;border:1px dashed #000;text-align:center;font-weight:bold">${esc(jp)}</div>`:"")
-      +(d.footer?`<div style="text-align:center;margin-top:6px">${esc(d.footer)}</div>`:"")+`</div>`}
+      +(this.activeTicketMessages(d).map(m=>`<div style="margin-top:6px;padding:4px;border:1px dashed #000;text-align:center">${esc(m.text)}</div>`).join(""))
+      +(d.footer?`<div style="text-align:center;margin-top:6px">${esc(this.fillTicketPlaceholders(d.footer))}</div>`:"")+`</div>`}
 
   paint(){const s=this.s,q=x=>this.shadowRoot.querySelector(x);if(s.tab!=="sell"||!q("#num"))return;const bt=this.bt(),cur=s.data.currency,g=this.primaryGame(),gfmt=g?this.gameFormat(g):"digit",dig=g?this.gameDigits(g):4;
     if(!g){q("#num").innerHTML=`<small>Game</small><span class="amtv" style="font-size:16px">Select a game</span>`;q("#amt").innerHTML=`<small>Amount ${cur}</small><span class="amtv">${s.amt||"0"}</span>`;}
@@ -846,8 +870,17 @@ class LotteryPosPanel extends HTMLElement{
       case "paywin":{if(!await this.modal({title:"Pay prize",text:`Ticket ${ds.v}`,ok:"Mark as paid"}))break;const r=await this.call("redeem",{ticket_id:ds.v,retailer_id:s.retailer});if(r){this.print(this.receipt(r,"PAID "+fmt(r.prize)));await this.loadResults()}break}
       case "saveret":{const r=this.shadowRoot.querySelector(`.rtr[data-id="${ds.v}"]`);if(!r)break;
         if(await this.call("update_retailer",{retailer_id:String(ds.v),name:r.querySelector(".r-name").value,number:r.querySelector(".r-num").value,first_name:r.querySelector(".r-fn").value,last_name:r.querySelector(".r-ln").value,address:r.querySelector(".r-addr").value,phone:r.querySelector(".r-ph").value,commission_sell:+r.querySelector(".r-cs").value,commission_redeem:+r.querySelector(".r-cr").value,active:r.querySelector(".r-act").checked})){s.data=await this.ws("state");this.toast("Retailer saved");this.render()}break}
-      case "savedesign":{const r=await this.call("set_ticket_design",{design:this.design()});if(r){s.data=await this.ws("state");s.design=null;this.toast("Ticket layout saved");this.render()}break}
-      case "resetdesign":s.design={...this.designDefaults()};this.render();break;
+      case "savedesign":{const d=this.design();
+        d.messages=[...this.shadowRoot.querySelectorAll(".tmsg-row")].map(row=>({
+          id:row.dataset.id||undefined,
+          text:row.querySelector(".tm-text")?.value||"",
+          enabled:!!row.querySelector(".tm-en")?.checked,
+          start_at:row.querySelector(".tm-start")?.value||"",
+          end_at:row.querySelector(".tm-end")?.value||""
+        })).filter(m=>m.text.trim());
+        const r=await this.call("set_ticket_design",{design:d});if(r){s.data=await this.ws("state");s.design=null;this.toast("Ticket layout saved");this.render()}break}
+      case "addtmsg":{const d=this.design();if(!d.messages)d.messages=[];d.messages.push({id:"",text:"",enabled:true,start_at:"",end_at:""});this.render();break}
+      case "resetdesign":s.design={...this.designDefaults(),messages:[]};this.render();break;
       case "testprint":{const d=this.design();this.print(this.docHTML(this.receiptInner(this.sampleTicket(),"TEST TICKET",d),d));break}
       case "addnprizerow":{
         const box=this.shadowRoot.querySelector("#n-prizes");if(!box)break;
