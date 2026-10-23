@@ -606,7 +606,7 @@ class LotteryPosPanel extends HTMLElement{
     </div>`}
     designDefaults(){return {font:"mono",size:12,width:72,align:"center",header:"",footer:"Good luck!",show_logo:true,logo_height:40,show_name:true,show_retailer:true,show_datetime:true,bold_total:true,show_barcode:true,show_qr:false,qr_size:28,qr_prefix:"",show_jackpot:false,jackpot_mode:"auto",jackpot_text:"",jackpot_game:"",messages:[]}}
   saved(){return {...this.designDefaults(),...(this.s.data.settings.ticket||{})}}
-  design(){if(this.s.design)return this.s.design;const base=this.saved();this.s.design={...base,messages:(base.messages||[]).map(m=>({...m}))};return this.s.design}
+  design(){if(this.s.design)return this.s.design;const base=this.saved();this.s.design={...base,messages:(base.messages||[]).map(m=>({...m,games:[...(m.games||[])]}))};return this.s.design}
   designCard(){const d=this.design(),chk=(k,l)=>`<label class="chip"><input type="checkbox" class="d-f" data-k="${k}" ${d[k]?"checked":""}> ${l}</label>`,opt=(arr,cur)=>arr.map(a=>`<option value="${a[0]}" ${String(cur)===String(a[0])?"selected":""}>${a[1]}</option>`).join("");
     return `<div class="card"><h3>Ticket layout</h3>
     <div class="row"><label>Font <select class="d-f" data-k="font">${opt([["mono","Monospace (thermal)"],["sans","Sans-serif"],["serif","Serif"],["condensed","Condensed"]],d.font)}</select></label>
@@ -624,16 +624,20 @@ class LotteryPosPanel extends HTMLElement{
       <label>Jackpot game <select class="d-f" data-k="jackpot_game"><option value="">First jackpot game</option>${(this.s.data.all_games||[]).filter(g=>(g.format||"")==="jackpot").map(g=>`<option value="${esc(g.id)}" ${d.jackpot_game===g.id?"selected":""}>${esc(g.name)}</option>`).join("")}</select></label></div>
     <div class="row"><input class="d-f" data-k="jackpot_text" placeholder='Template e.g. {name} jackpot is {amount}' value="${esc(d.jackpot_text||"")}" style="flex:1" maxlength="120"></div>
     <p class="note">Placeholders: <code>{name}</code> jackpot game name · <code>{amount}</code> pool · <code>{date}</code> e.g. Friday, October 23, 2026</p>
-    <h3>Scheduled ticket messages</h3>
-    <p class="note">Messages print on the ticket only while the current date/time is inside the window. Leave start/end empty for always-on. Supports the same placeholders.</p>
-    <div id="tmsg-list">${(d.messages||[]).map((m,i)=>`<div class="tmsg-row card" style="padding:10px;margin:8px 0;box-shadow:none" data-i="${i}">
-      <div class="row"><input class="tm-text" value="${esc(m.text||"")}" placeholder="Message text — use {date}, {name}, {amount}" style="flex:1" maxlength="200">
-        <label><input type="checkbox" class="tm-en" ${m.enabled!==false?"checked":""}> On</label>
-        <button type="button" class="ghost" data-a="rmtmsg">✕</button></div>
-      <div class="row"><label>From <input class="tm-start" type="datetime-local" value="${esc((m.start_at||"").slice(0,16))}"></label>
-        <label>Until <input class="tm-end" type="datetime-local" value="${esc((m.end_at||"").slice(0,16))}"></label></div>
-    </div>`).join("")||`<div class="empty" style="padding:12px">No scheduled messages</div>`}</div>
-    <div class="row"><button type="button" class="ghost" data-a="addtmsg">+ Add message</button></div>
+    <h3>Message of the day</h3>
+    <p class="note">Each message can target <b>all games</b> (no game checked) or only selected games. Placeholders: <code>{date}</code> · <code>{name}</code> · <code>{amount}</code>. Dynamic messages keep line breaks on the ticket.</p>
+    <h4 style="margin:12px 0 4px">Standard text</h4>
+    <p class="note">Always printed when enabled (no date window).</p>
+    <div class="tmsg-group">${(d.messages||[]).map((m,i)=>({m,i})).filter(x=>(x.m.type||"standard")==="standard").map(({m,i})=>this.msgRowHTML(m,i,this.s.data.all_games||[])).join("")||`<div class="empty" style="padding:10px">None</div>`}</div>
+    <div class="row"><button type="button" class="ghost" data-a="addtmsg" data-v="standard">+ Standard message</button></div>
+    <h4 style="margin:14px 0 4px">Dynamic text</h4>
+    <p class="note">Use placeholders on separate lines, e.g. <code>{date}</code> then <code>{name} jackpot is {amount}</code>.</p>
+    <div class="tmsg-group">${(d.messages||[]).map((m,i)=>({m,i})).filter(x=>(x.m.type||"")==="dynamic").map(({m,i})=>this.msgRowHTML(m,i,this.s.data.all_games||[])).join("")||`<div class="empty" style="padding:10px">None</div>`}</div>
+    <div class="row"><button type="button" class="ghost" data-a="addtmsg" data-v="dynamic">+ Dynamic message</button></div>
+    <h4 style="margin:14px 0 4px">Scheduled text</h4>
+    <p class="note">Only prints between From and Until. Leave either empty for open-ended.</p>
+    <div class="tmsg-group">${(d.messages||[]).map((m,i)=>({m,i})).filter(x=>(x.m.type||"")==="scheduled").map(({m,i})=>this.msgRowHTML(m,i,this.s.data.all_games||[])).join("")||`<div class="empty" style="padding:10px">None</div>`}</div>
+    <div class="row"><button type="button" class="ghost" data-a="addtmsg" data-v="scheduled">+ Scheduled message</button></div>
     <h3>Scan codes</h3><div class="row">${chk("show_barcode","Barcode (Code 39)")}${chk("show_qr","QR code")}<label>QR size <input class="d-f" data-k="qr_size" type="number" min="15" max="45" value="${d.qr_size}" style="width:70px"> mm</label></div>
     <div class="row"><input class="d-f" data-k="qr_prefix" placeholder="Optional text before the ticket number inside the QR" value="${esc(d.qr_prefix)}" maxlength="40" style="flex:1"></div>
     <p class="note">Barcode scanners and 2D/QR scanners type the code into the scan box on the Sell screen. The ticket number is read from the end of the code, so a prefix is fine.</p>
@@ -647,23 +651,44 @@ class LotteryPosPanel extends HTMLElement{
   longDate(dt){const d=dt?new Date(dt):new Date();
     if(isNaN(d.getTime()))return"";
     return d.toLocaleDateString("en-US",{weekday:"long",year:"numeric",month:"long",day:"numeric"})}
-  fillTicketPlaceholders(tpl,extra={}){const games=(this.s.data.all_games||[]).filter(g=>(g.format||"")==="jackpot");
-    const d=this.design?this.design():(this.s.data.settings.ticket||{});
-    const g=extra.game||(d.jackpot_game?games.find(x=>x.id===d.jackpot_game):games[0]);
+  fillTicketPlaceholders(tpl,extra={}){const jgames=(this.s.data.all_games||[]).filter(g=>(g.format||"")==="jackpot");
+    const des=this.s.design||this.s.data.settings.ticket||{};
+    const g=extra.game||(des.jackpot_game?jgames.find(x=>x.id===des.jackpot_game):jgames[0]);
     const name=g?g.name:(extra.name||"Jackpot");
     const amount=g?Number(g.jackpot_current||g.jackpot_min||0):0;
     const amt=amount.toLocaleString(undefined,{maximumFractionDigits:0});
     const dateStr=this.longDate();
     return String(tpl||"").replaceAll("{name}",name).replaceAll("{amount}",amt).replaceAll("{date}",dateStr)}
   msgActive(m){if(!m||m.enabled===false)return false;
-    const now=Date.now();
-    if(m.start_at){const t=Date.parse(m.start_at);if(!isNaN(t)&&now<t)return false}
-    if(m.end_at){const t=Date.parse(m.end_at);if(!isNaN(t)&&now>t)return false}
+    const typ=m.type||"standard";
+    if(typ==="scheduled"){
+      const now=Date.now();
+      if(m.start_at){const t=Date.parse(m.start_at);if(!isNaN(t)&&now<t)return false}
+      if(m.end_at){const t=Date.parse(m.end_at);if(!isNaN(t)&&now>t)return false}
+    }
     return true}
-  activeTicketMessages(d){return (d.messages||[]).filter(m=>this.msgActive(m)).map(m=>({...m,text:this.fillTicketPlaceholders(m.text)}))}
+  msgMatchesTicket(m,ticket){const scope=m.games||[];
+    if(!scope.length)return true; // all games
+    const onTicket=new Set((ticket?.lines||[]).map(l=>l.game));
+    return scope.some(id=>onTicket.has(id))}
+  activeTicketMessages(d,ticket){return (d.messages||[])
+    .filter(m=>this.msgActive(m)&&this.msgMatchesTicket(m,ticket))
+    .map(m=>({...m,text:this.fillTicketPlaceholders(m.text)}))}
   jackpotTicketMsg(d){if(!d||!d.show_jackpot)return"";
     const tpl=((d.jackpot_mode==="manual"&&(d.jackpot_text||"").trim())?(d.jackpot_text||""):((d.jackpot_text||"").trim()||"{name} jackpot is {amount}"));
     return this.fillTicketPlaceholders(tpl)}
+  msgRowHTML(m,i,games){const typ=m.type||"standard";
+    const sel=new Set(m.games||[]);
+    const gameChips=games.map(g=>`<label class="chip"><input type="checkbox" class="tm-game" value="${esc(g.id)}" ${sel.has(g.id)?"checked":""}> ${esc(g.name)}</label>`).join("")||`<span class="note">No games</span>`;
+    return `<div class="tmsg-row card" style="padding:10px;margin:8px 0;box-shadow:none" data-i="${i}" data-type="${typ}">
+      <div class="row"><span class="note" style="font-weight:700;text-transform:uppercase;letter-spacing:.04em">${typ}</span>
+        <label><input type="checkbox" class="tm-en" ${m.enabled!==false?"checked":""}> On</label>
+        <button type="button" class="ghost" data-a="rmtmsg">✕</button></div>
+      <div class="row"><textarea class="tm-text" rows="${typ==="dynamic"?3:2}" placeholder="${typ==="dynamic"?"Line 1\n{date}\n{name} jackpot is {amount}":"Message text"}" style="flex:1;min-height:${typ==="dynamic"?72:48}px;resize:vertical;padding:8px;border-radius:10px;border:1px solid var(--line);background:var(--key);color:var(--ink);font:inherit">${esc(m.text||"")}</textarea></div>
+      ${typ==="scheduled"?`<div class="row"><label>From <input class="tm-start" type="datetime-local" value="${esc((m.start_at||"").slice(0,16))}"></label>
+        <label>Until <input class="tm-end" type="datetime-local" value="${esc((m.end_at||"").slice(0,16))}"></label></div>`:""}
+      <div class="row"><span class="note" style="width:100%">Games (none selected = all games on the ticket):</span>${gameChips}</div>
+    </div>`}
   receiptInner(t,title,d){const st=this.s.data.settings,c=this.s.data.currency,al=d.align==="left"?"left":"center",
       fam={mono:'"Courier New",monospace',sans:"Arial,Helvetica,sans-serif",serif:"Georgia,serif",condensed:'"Arial Narrow","Roboto Condensed",Arial,sans-serif'}[d.font]||"monospace",
       row=l=>`<div style="display:flex;justify-content:space-between;gap:6px"><span>${esc(this.gn(l.game))} ${l.date.slice(5)}</span><span>${l.number} ${esc(this.btl(l.bet_type))}</span><b>${fmt(l.amount)}</b></div>`,
@@ -682,7 +707,11 @@ class LotteryPosPanel extends HTMLElement{
       +(d.show_qr?`<div style="margin-top:8px"><div style="width:${d.qr_size}mm;max-width:100%;margin:0 auto">${qrSVG((d.qr_prefix||"")+t.id)}</div></div>`:"")
       +`<div style="text-align:center;font-size:${Math.max(8,d.size-1)}px">${t.id}</div>`
       +(jp?`<div style="margin-top:6px;padding:4px;border:1px dashed #000;text-align:center;font-weight:bold">${esc(jp)}</div>`:"")
-      +(this.activeTicketMessages(d).map(m=>`<div style="margin-top:6px;padding:4px;border:1px dashed #000;text-align:center">${esc(m.text)}</div>`).join(""))
+      +(this.activeTicketMessages(d,t).map(m=>{
+        const body=esc(m.text).replace(/\n/g,"<br>");
+        const border=m.type==="dynamic"||m.type==="scheduled"?"1px dashed #000":"1px solid #000";
+        return `<div style="margin-top:6px;padding:4px;border:${border};text-align:center;white-space:pre-wrap;line-height:1.35">${body}</div>`;
+      }).join(""))
       +(d.footer?`<div style="text-align:center;margin-top:6px">${esc(this.fillTicketPlaceholders(d.footer))}</div>`:"")+`</div>`}
 
   paint(){const s=this.s,q=x=>this.shadowRoot.querySelector(x);if(s.tab!=="sell"||!q("#num"))return;const bt=this.bt(),cur=s.data.currency,g=this.primaryGame(),gfmt=g?this.gameFormat(g):"digit",dig=g?this.gameDigits(g):4;
@@ -873,13 +902,15 @@ class LotteryPosPanel extends HTMLElement{
       case "savedesign":{const d=this.design();
         d.messages=[...this.shadowRoot.querySelectorAll(".tmsg-row")].map(row=>({
           id:row.dataset.id||undefined,
+          type:row.dataset.type||"standard",
           text:row.querySelector(".tm-text")?.value||"",
           enabled:!!row.querySelector(".tm-en")?.checked,
+          games:[...row.querySelectorAll(".tm-game:checked")].map(x=>x.value),
           start_at:row.querySelector(".tm-start")?.value||"",
           end_at:row.querySelector(".tm-end")?.value||""
         })).filter(m=>m.text.trim());
         const r=await this.call("set_ticket_design",{design:d});if(r){s.data=await this.ws("state");s.design=null;this.toast("Ticket layout saved");this.render()}break}
-      case "addtmsg":{const d=this.design();if(!d.messages)d.messages=[];d.messages.push({id:"",text:"",enabled:true,start_at:"",end_at:""});this.render();break}
+      case "addtmsg":{const d=this.design();if(!d.messages)d.messages=[];const typ=ds.v||"standard";d.messages.push({id:"",type:typ,text:typ==="dynamic"?"{date}\n{name} jackpot is {amount}":"",enabled:true,games:[],start_at:"",end_at:""});this.render();break}
       case "resetdesign":s.design={...this.designDefaults(),messages:[]};this.render();break;
       case "testprint":{const d=this.design();this.print(this.docHTML(this.receiptInner(this.sampleTicket(),"TEST TICKET",d),d));break}
       case "addnprizerow":{

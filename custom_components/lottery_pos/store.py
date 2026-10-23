@@ -665,23 +665,33 @@ class LotteryStore:
         out["jackpot_text"] = out.get("jackpot_text", "")[:160]
         out["jackpot_mode"] = out.get("jackpot_mode") if out.get("jackpot_mode") in ("auto", "manual") else "auto"
         out["jackpot_game"] = out.get("jackpot_game", "")[:40]
-        # Scheduled ticket messages
+        # Ticket messages of the day (standard / dynamic / scheduled)
         msgs = d.get("messages", TICKET_DEFAULTS.get("messages", []))
         if not isinstance(msgs, list):
             raise LotteryError("messages must be a list")
+        known_games = {g["id"] for g in self.data["games"]}
         cleaned = []
-        for i, m in enumerate(msgs[:20]):
+        for i, m in enumerate(msgs[:30]):
             if not isinstance(m, dict):
                 continue
-            text = str(m.get("text") or "").strip()[:200]
+            text = str(m.get("text") or "").strip()[:400]
             if not text:
                 continue
+            mtype = str(m.get("type") or "standard")
+            if mtype not in ("standard", "dynamic", "scheduled"):
+                mtype = "standard"
+            games = m.get("games") or []
+            if not isinstance(games, list):
+                games = []
+            games = [str(g) for g in games if str(g) in known_games]
             cleaned.append({
                 "id": str(m.get("id") or secrets.token_hex(4)),
+                "type": mtype,
                 "text": text,
                 "enabled": bool(m.get("enabled", True)),
-                "start_at": str(m.get("start_at") or "")[:32],
-                "end_at": str(m.get("end_at") or "")[:32],
+                "games": games,  # empty = all games on the ticket
+                "start_at": str(m.get("start_at") or "")[:32] if mtype == "scheduled" else "",
+                "end_at": str(m.get("end_at") or "")[:32] if mtype == "scheduled" else "",
             })
         out["messages"] = cleaned
         self.data["settings"]["ticket"] = out
