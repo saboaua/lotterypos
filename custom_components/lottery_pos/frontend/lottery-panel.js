@@ -331,12 +331,17 @@ class LotteryPosPanel extends HTMLElement{
   sellHTML(){const s=this.s,d=s.data;
     // Keep valid selection; if empty pick first enabled game (open preferred)
     s.sel=(s.sel||[]).filter(id=>d.games.some(g=>g.id===id));
-    if(!s.sel.length){
-      const open=d.games.find(x=>this.cd(x).open);
-      s.sel=[(open||d.games[0])?.id].filter(Boolean);
-    } else if(s.sel.length>1){
-      s.sel=[s.sel[0]]; // single-select sell
+    // Multi-select allowed for digit games; keep jackpot/zodiac exclusive
+    if(s.sel.length>1){
+      const gs=s.sel.map(id=>d.all_games.find(g=>g.id===id)).filter(Boolean);
+      const fmts=new Set(gs.map(g=>this.gameFormat(g)));
+      if(fmts.size>1||[...fmts][0]!=="digit") s.sel=[s.sel[0]];
+      else {
+        const digs=new Set(gs.map(g=>+(g.digits||4)));
+        if(digs.size>1) s.sel=[s.sel[0]];
+      }
     }
+
     this._sig=d.games.map(g=>this.cd(g).open?1:0).join("");
     const ok=this.allowedBTs();if(ok.length&&!ok.find(b=>b.key===s.bt)){s.bt=ok[0].key;s.num=s.num.slice(0,ok[0].digits||this.gameDigits(this.primaryGame()))}
     const games=d.games.map(g=>{const c=this.cd(g);const fmt=this.gameFormat(g);const tag=fmt==="digit"?`${g.digits||4}d`:fmt;return `<button class="game ${s.sel.includes(g.id)?"on":""} ${c.open?"":"closed"}" style="--c:${g.color}" data-a="game" data-v="${g.id}"><span class="gi">${g.logo?`<img src="${g.logo}">`:esc(g.name[0])}</span><b>${esc(g.name)}</b><small class="fmt-tag">${tag}</small><small>Draw ${g.draw_time}${g.draw_days?.length&&g.draw_days.length<7?" · "+g.draw_days.map(i=>DAYS[i]).join(" "):""}</small><small data-cd="${g.id}">${c.txt}</small><span class="chk">✓</span></button>`}).join("");
@@ -354,7 +359,7 @@ class LotteryPosPanel extends HTMLElement{
       <div class="pre">${(()=>{const g=this.primaryGame();const prices=(g&&this.gameFormat(g)==="jackpot")?((g.fixed_prices&&g.fixed_prices.length)?g.fixed_prices:[2,3,4,5]):PRESETS;
         return prices.map(p=>`<button data-a="preset" data-v="${p}">${p}</button>`).join("")})()}</div></div>
     <div class="acts">${acts.map(a=>`<button data-a="${a[0]}"><ha-icon icon="${a[1]}"></ha-icon>${a[2]}</button>`).join("")}</div>
-  </section><section class="right card"><div class="rhead"><h3>Current ticket</h3><span class="badge" id="cnt">0</span></div><div class="rsub">${s.sel[0]?esc(this.gn(s.sel[0])):"No game"} · tap a game above to switch · ✎ edits a play</div>
+  </section><section class="right card"><div class="rhead"><h3>Current ticket</h3><span class="badge" id="cnt">0</span></div><div class="rsub">${s.sel.length?s.sel.map(id=>esc(this.gn(id))).join(" · "):"No game"} · tap digit games to multi-select · ✎ edits a play</div>
     <div id="lines"></div><div class="foot"><div><small>Total</small><div class="tot" id="tot"></div></div><button class="send" data-a="send">Send &amp; Print ▶</button></div></section></div>`}
 
   async loadResults(){const s=this.s;s.rf=s.rf||ago(6);s.rt=s.rt||today();const r=await this.call("results_summary",{date_from:s.rf,date_to:s.rt});if(r)s.rs=r;this.render()}
@@ -797,19 +802,43 @@ class LotteryPosPanel extends HTMLElement{
     else if(f==="num"){if(s.num.length<dig)s.num+=k;if(s.num.length===dig)s.field="amt"}
     else if(s.amt.length<7)s.amt=(s.amt==="0"?"":s.amt)+k;
     this.paint()}
-  add(){const s=this.s,bt=this.bt(),amt=parseFloat(s.amt),g=this.primaryGame(),fmt=this.gameFormat(g),dig=this.gameDigits(g);
-    if(!s.sel.length||!g)return this.toast("Select a game first",1);
+  add(){const s=this.s,bt=this.bt(),amt=parseFloat(s.amt);
+    if(!s.sel.length)return this.toast("Select a game first",1);
     if(!(amt>0))return this.toast("Enter an amount",1);
+    const draws=Math.max(1,Math.min(28,+(s.draws||1)));
+    const games=s.sel.map(id=>s.data.all_games.find(g=>g.id===id)).filter(Boolean);
+    if(!games.length)return this.toast("Select a game first",1);
+    const fmt=this.gameFormat(games[0]);
+    // Multi digit: one cart line per selected game
+    if(fmt==="digit"&&games.length>=1){
+      if(!bt)return this.toast("No bet type available",1);
+      const dig=this.gameDigits(games[0])||bt.digits;
+      if(s.num.length!==dig)return this.toast(`Needs ${dig} digits`,1);
+      if(games.some(g=>this.gameFormat(g)!=="digit"||+(g.digits||4)!==+(games[0].digits||4)))
+        return this.toast("Selected games must share the same digit length",1);
+      const made=[];
+      for(const g of games){
+        const minS=+(g.min_stake??bt?.min_stake??0.5), maxS=+(g.max_stake??bt?.max_stake??100);
+        if(amt<minS||amt>maxS)return this.toast(`${g.name}: amount must be ${minS}–${maxS}`,1);
+        made.push({game:g.id,bet_type:bt.key,number:s.num,amount:amt,date:s.date,format:"digit",draws});
+      }
+      if(s.editIdx!=null){
+        // edit replaces the one line; multi-add not used while editing
+        s.lines[s.editIdx]=made[0];s.editIdx=null;s.fresh=null;s.num="";s.field="num";
+        this.toast("Play updated");return this.render();
+      }
+      const n=made.length;const num=made[0].number;
+      s.lines.push(...made);
+      s.num="";s.field="num";
+      this.toast(n>1?`Added ${num} to ${n} games`:"Added");
+      return this.paint();
+    }
+    const g=games[0];
+    const dig=this.gameDigits(g);
     const minS=+(g.min_stake??bt?.min_stake??0.5), maxS=+(g.max_stake??bt?.max_stake??100);
     if(amt<minS||amt>maxS)return this.toast(`Amount must be ${minS}–${maxS}`,1);
-    const draws=Math.max(1,Math.min(28,+(s.draws||1)));
-    let line={game:s.sel[0],bet_type:bt?.key||(fmt==="jackpot"?"jackpot":fmt==="zodiac"?"zodiac":""),amount:amt,date:s.date,format:fmt,draws};
-    if(fmt==="digit"){
-      if(!bt)return this.toast("No bet type available",1);
-      const need=dig||bt.digits;
-      if(s.num.length!==need)return this.toast(`Needs ${need} digits`,1);
-      line.bet_type=bt.key;line.number=s.num;
-    }else if(fmt==="zodiac"){
+    let line={game:g.id,bet_type:bt?.key||(fmt==="jackpot"?"jackpot":fmt==="zodiac"?"zodiac":""),amount:amt,date:s.date,format:fmt,draws};
+    if(fmt==="zodiac"){
       if(s.num.length!==dig)return this.toast(`Needs ${dig}-digit number`,1);
       const syms=s.allZodiac?this.zodiacList().map(z=>z.id):(s.symbols||[]);
       if(!syms.length)return this.toast("Select zodiac symbols or All",1);
@@ -821,6 +850,11 @@ class LotteryPosPanel extends HTMLElement{
       const prices=(g.fixed_prices&&g.fixed_prices.length)?g.fixed_prices.map(Number):[2,3,4,5];
       if(!prices.some(pr=>Math.abs(pr-amt)<1e-9))return this.toast(`Pick a fixed price: ${prices.join(", ")}`,1);
       line.bet_type="jackpot";line.balls=[...s.balls].sort();line.mega=s.mega||"";line.number=line.balls.join("-")+(line.mega?"+"+line.mega:"");
+    }else{
+      if(!bt)return this.toast("No bet type available",1);
+      const need=dig||bt.digits;
+      if(s.num.length!==need)return this.toast(`Needs ${need} digits`,1);
+      line.bet_type=bt.key;line.number=s.num;
     }
     if(s.editIdx!=null){s.lines[s.editIdx]=line;s.editIdx=null;s.fresh=null;s.num="";s.balls=[];s.mega="";s.symbols=[];s.allZodiac=false;s.field="num";this.toast("Play updated");return this.render()}
     s.lines.push(line);
@@ -855,14 +889,32 @@ class LotteryPosPanel extends HTMLElement{
         box.appendChild(row);break}
       case "tab":{s.tab=ds.v;if(ds.v==="sell"){s.sel=[];s.balls=[];s.mega="";s.symbols=[];s.num="";s.amt="";s.field="num"}this.render();break}
       case "game":{
-        // Single-select: tap a game to sell that game only
-        if(s.sel.length===1&&s.sel[0]===ds.v)break; // already selected
-        s.sel=[ds.v];
-        s.symbols=[];s.balls=[];s.mega="";s.allZodiac=false;s.num="";s.amt="";
         const ng=s.data.all_games.find(g=>g.id===ds.v);
-        s.field=this.gameFormat(ng)==="jackpot"?"amt":"num";
-        const ok=this.allowedBTs();
-        if(ok.length)s.bt=ok[0].key;
+        if(!ng)break;
+        const fmt=this.gameFormat(ng);
+        if(fmt==="digit"){
+          // Toggle multi-select among digit games with the same digit length
+          const dig=+(ng.digits||4);
+          if(s.sel.includes(ds.v)){
+            s.sel=s.sel.filter(id=>id!==ds.v);
+          } else {
+            // drop non-digit or different digit-length selections
+            s.sel=s.sel.filter(id=>{
+              const g=s.data.all_games.find(x=>x.id===id);
+              return g&&this.gameFormat(g)==="digit"&&+(g.digits||4)===dig;
+            });
+            s.sel=[...s.sel,ds.v];
+            s.balls=[];s.mega="";s.symbols=[];s.allZodiac=false;
+          }
+          if(!s.sel.length){/* allow empty */}
+          else {s.field="num";const ok=this.allowedBTs();if(ok.length&&!ok.find(b=>b.key===s.bt))s.bt=ok[0].key}
+        } else {
+          // Jackpot / zodiac: exclusive single select
+          s.sel=[ds.v];
+          s.symbols=[];s.balls=[];s.mega="";s.allZodiac=false;s.num="";
+          s.field=fmt==="jackpot"?"amt":"num";
+          const ok=this.allowedBTs();if(ok.length)s.bt=ok[0].key;
+        }
         this.render();break}
       case "bt":s.bt=ds.v;s.num=s.num.slice(0,this.bt().digits);s.field="num";this.render();break;
       case "field":s.field=ds.v;this.paint();break;

@@ -1,4 +1,5 @@
 """WebSocket API used by the sidebar panel."""
+import asyncio
 import voluptuous as vol
 from homeassistant.components import websocket_api
 
@@ -29,7 +30,14 @@ def _cmd(name, schema=None, admin=False):
                 connection.send_error(msg["id"], "unauthorized", "Admin access required")
                 return
             try:
-                connection.send_result(msg["id"], fn(hass.data[DOMAIN]["store"], msg))
+                store = hass.data[DOMAIN]["store"]
+                try:
+                    result = fn(store, msg, hass)
+                except TypeError:
+                    result = fn(store, msg)
+                if asyncio.iscoroutine(result):
+                    result = await result
+                connection.send_result(msg["id"], result)
             except LotteryError as err:
                 connection.send_error(msg["id"], "lottery_error", str(err))
         return handler
@@ -72,10 +80,14 @@ def _draws(s, m): return s.draw_results(m["date"])
 def _report(s, m): return s.report(m["date_from"], m["date_to"])
 
 @_cmd("scrape_indios", {vol.Optional("url", default="https://indioslottery.com/"): str}, admin=True)
-def _scrape_indios(s, m): return s.scrape_indios(m.get("url") or "https://indioslottery.com/")
+async def _scrape_indios(s, m, hass):
+    url = m.get("url") or "https://indioslottery.com/"
+    return await hass.async_add_executor_job(s.scrape_indios, url)
 
 @_cmd("scrape_joeblack", {vol.Optional("url", default="https://indioslottery.com/"): str}, admin=True)
-def _scrape(s, m): return s.scrape_indios(m.get("url") or "https://indioslottery.com/")
+async def _scrape(s, m, hass):
+    url = m.get("url") or "https://indioslottery.com/"
+    return await hass.async_add_executor_job(s.scrape_indios, url)
 
 @_cmd("set_results", {vol.Required("game"): str, vol.Required("date"): str, vol.Required("numbers"): [str]}, admin=True)
 def _results(s, m): return {"winners": s.set_results(m["game"], m["date"], m["numbers"])}

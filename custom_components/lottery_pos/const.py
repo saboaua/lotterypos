@@ -6,7 +6,7 @@ PANEL_URL = "lottery-pos"
 STATIC_URL = "/lottery_pos_static/lottery-panel.js"
 SIGNAL_UPDATE = f"{DOMAIN}_update"
 PLATFORMS = ["sensor"]
-VERSION = "0.8.9"
+VERSION = "0.9.1"
 
 # Chinese zodiac (common in Caribbean / Asian number games)
 ZODIAC_SYMBOLS = [
