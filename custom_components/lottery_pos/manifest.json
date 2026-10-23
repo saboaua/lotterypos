@@ -9,5 +9,5 @@
   "issue_tracker": "https://github.com/saboaua/lotterypos/issues",
   "integration_type": "service",
   "iot_class": "local_push",
-  "version": "0.8.2"
+  "version": "0.8.3"
 }

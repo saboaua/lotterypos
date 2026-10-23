@@ -167,6 +167,24 @@ table{width:100%;border-collapse:collapse;font-size:13px}td,th{padding:9px 6px;b
 .draw-sel button{min-width:40px;height:36px;border-radius:10px;background:var(--key);color:var(--ink);font-weight:700;border:2px solid var(--line)}
 .draw-sel button.on{background:linear-gradient(135deg,var(--pri),var(--pri2));color:#fff;border-color:transparent}
 .jprize-row{display:grid;grid-template-columns:70px 90px 110px 1fr 36px;gap:6px;align-items:center;margin-bottom:6px}
+.glist{display:flex;flex-direction:column;gap:10px}
+.glist-item{border:1px solid var(--line);border-radius:18px;background:var(--card);overflow:hidden;box-shadow:var(--sh);transition:box-shadow .18s,border-color .18s}
+.glist-item.open{border-color:color-mix(in srgb,var(--pri) 45%,var(--line));box-shadow:0 10px 28px color-mix(in srgb,var(--pri) 18%,transparent)}
+.glist-head{display:flex;align-items:center;gap:12px;padding:14px 16px;cursor:pointer;width:100%;text-align:left;background:transparent;color:var(--ink);border:0;font:inherit}
+.glist-head:hover{background:var(--key)}
+.glist-item.open .glist-head{background:linear-gradient(135deg,color-mix(in srgb,var(--pri) 10%,var(--card)),var(--card))}
+.glist-head .dot{width:16px;height:16px;border-radius:50%;flex-shrink:0;box-shadow:0 0 0 3px color-mix(in srgb,var(--pri) 12%,transparent)}
+.glist-head .meta{flex:1;min-width:0}
+.glist-head .meta b{display:block;font-size:15px;font-weight:700}
+.glist-head .meta small{color:var(--mut);font-size:12px;line-height:1.35}
+.glist-head ha-icon{--mdc-icon-size:22px;color:var(--mut);transition:transform .2s}
+.glist-item.open .glist-head ha-icon{transform:rotate(180deg);color:var(--pri)}
+.glist-body{padding:14px 16px 16px;border-top:1px solid var(--line);background:color-mix(in srgb,var(--key) 55%,var(--card))}
+.price-sel{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0}
+.price-sel button{min-width:52px;height:44px;border-radius:12px;font-weight:800;font-size:16px;background:var(--key);color:var(--ink);border:2px solid var(--line)}
+.price-sel button.on{background:linear-gradient(135deg,var(--pri),var(--pri2));color:#fff;border-color:transparent}
+.hint-pick{padding:12px 14px;border-radius:14px;background:color-mix(in srgb,var(--pri) 10%,var(--card));border:1px dashed color-mix(in srgb,var(--pri) 35%,var(--line));color:var(--mut);font-size:13px;margin:8px 0;text-align:center}
+
 
 
 .ret-card{border:1px solid var(--line);border-radius:20px;padding:16px;margin-bottom:14px;background:var(--card);box-shadow:var(--sh)}
@@ -282,10 +300,14 @@ class LotteryPosPanel extends HTMLElement{
       const mc=+g.main_count||5, mm=+g.main_max||30, mega=+g.mega_count||0, mx=+g.mega_max||15;
       const balls=s.balls||[];
       const pool=Number(g.jackpot_current||g.jackpot_min||0);
+      const prices=(g.fixed_prices&&g.fixed_prices.length)?g.fixed_prices:[2,3,4,5];
+      const curAmt=parseFloat(s.amt);
       return `<div class="fmt-panel"><h5>Jackpot · pick ${mc} from 01–${String(mm).padStart(2,"0")}${mega?` + mega 01–${String(mx).padStart(2,"0")}`:""} · pool <b>${this.s.data.currency} ${pool.toFixed(0)}</b></h5>
         <div class="ball-grid">${Array.from({length:mm},(_,i)=>{const v=String(i+1).padStart(2,"0");return `<button type="button" class="bchip ${balls.includes(v)?"on":""}" data-a="ball" data-v="${v}">${v}</button>`}).join("")}</div>
         ${mega?`<h5>Mega ball</h5><div class="ball-grid">${Array.from({length:mx},(_,i)=>{const v=String(i+1).padStart(2,"0");return `<button type="button" class="bchip mega ${s.mega===v?"on":""}" data-a="mega" data-v="${v}">${v}</button>`}).join("")}</div>`:""}
-        <span class="note">${balls.length}/${mc} main${mega?` · mega ${s.mega||"—"}`:""}</span></div>`;
+        <h5>Fixed price</h5>
+        <div class="price-sel">${prices.map(pr=>`<button type="button" class="${+curAmt===+pr?"on":""}" data-a="preset" data-v="${pr}">${pr}</button>`).join("")}</div>
+        <span class="note">${balls.length}/${mc} main${mega?` · mega ${s.mega||"—"}`:""} · price ${s.amt||"—"}</span></div>`;
     }
     const dig=this.gameDigits(g);
     return `<div class="fmt-panel"><h5>Number game · ${dig} digits (${"0".repeat(dig)}–${"9".repeat(dig)})</h5></div>`;
@@ -323,7 +345,14 @@ class LotteryPosPanel extends HTMLElement{
   resultsHTML(){const s=this.s,d=s.data,cur=d.currency,r=s.rs,lab={redeemed:["paid","Paid"],won:["unpaid","Unpaid"],active:["pending","Pending"]};
     const badge=x=>`<span class="st ${(lab[x]||["pending",x])[0]}">${(lab[x]||["",x])[1]}</span>`;
     const form=`<div class="card"><h3>Enter draw results</h3><div class="row"><select id="rg">${d.all_games.map(g=>`<option value="${g.id}">${esc(g.name)}</option>`).join("")}</select><input type="date" id="rd" value="${today()}"></div>
-      <div class="row"><input id="r1" maxlength="4" placeholder="1st" size="5" inputmode="numeric"><input id="r2" maxlength="4" placeholder="2nd" size="5" inputmode="numeric"><input id="r3" maxlength="4" placeholder="3rd" size="5" inputmode="numeric"></div><button data-a="saveres">Save &amp; settle</button></div>`;
+      <div class="row"><input id="r1" maxlength="4" placeholder="1st" size="5" inputmode="numeric"><input id="r2" maxlength="4" placeholder="2nd" size="5" inputmode="numeric"><input id="r3" maxlength="4" placeholder="3rd" size="5" inputmode="numeric"></div><button data-a="saveres">Save &amp; settle</button></div>
+      <div class="card"><h3>Import from joeblack.online</h3>
+        <p class="note">Scrapes the latest published winning numbers and settles matching local games (name match). Use to validate tickets against official results.</p>
+        <div class="row"><button data-a="scrapejb">Fetch results from joeblack.online</button></div>
+        ${s.scrapeResult?`<div class="note" style="margin-top:10px"><b>Date ${esc(s.scrapeResult.date||"")}</b><br>
+          Imported: ${(s.scrapeResult.imported||[]).map(x=>`${esc(x.game)} [${(x.numbers||[]).join(", ")}] → ${x.winners} winner(s)`).join("<br>")||"none"}
+          ${(s.scrapeResult.skipped||[]).length?`<br>Skipped: ${s.scrapeResult.skipped.map(x=>esc(x.name)+` (${esc(x.reason)})`).join(", ")}`:""}
+        </div>`:""}</div>`;
     const kc=(l,v,c="")=>`<div class="kc"><span>${l}</span><b class="${c}">${v}</b></div>`;
     const kp=r?`<div class="kpis">${kc("Winning tickets",r.totals.winners)}${kc("Prizes won ("+cur+")",fmt(r.totals.prizes))}${kc("Paid",fmt(r.totals.paid),"pos")}${kc("Unpaid liability",fmt(r.totals.unpaid),r.totals.unpaid>0?"neg":"")}</div>`:"";
     const draws=!r?`<div class="empty">Loading…</div>`:r.draws.length?`<table><tr><th>Game</th><th>Date</th><th>Numbers</th><th>Tickets</th><th>Winners</th><th>Sales</th><th>Prizes</th></tr>${r.draws.map(x=>`<tr><td>${esc(x.game_name)}</td><td>${x.date}</td><td>${x.numbers.join(" · ")}</td><td>${x.tickets}</td><td><b>${x.winners}</b></td><td>${fmt(x.sales)}</td><td>${fmt(x.prizes)}</td></tr>`).join("")}</table>`:`<div class="empty">No results entered in this range</div>`;
@@ -349,7 +378,7 @@ class LotteryPosPanel extends HTMLElement{
       const fmt=g.format||"digit";
       const tag=fmt==="digit"?`${g.digits||4}-digit`:fmt==="zodiac"?`zodiac ${g.digits||2}d`:`JP ${g.main_count||5}/${g.main_max||30}${g.mega_count?"+M":""}`;
       const open=openId===g.id;
-      return `<div class="glist-item">
+      return `<div class="glist-item ${open?"open":""}">
         <button type="button" class="glist-head" data-a="editgame" data-v="${esc(g.id)}">
           <span class="dot" style="background:${g.color}"></span>
           <span class="meta"><b>${esc(g.name)}</b><small>${tag} · draw ${g.draw_time} · cut ${g.cutoff}${fmt==="jackpot"?` · pool ${d.currency} ${Number(g.jackpot_current||g.jackpot_min||0).toFixed(0)}`:""}</small></span>
@@ -385,6 +414,9 @@ class LotteryPosPanel extends HTMLElement{
       <label>Mega <select class="f-mega"><option value="0" ${!(g.mega_count)?"selected":""}>None</option><option value="1" ${g.mega_count==1?"selected":""}>Yes</option></select></label>
       <label>Mega max <input class="f-mx" type="number" min="1" max="99" value="${g.mega_max||15}" style="width:70px"></label></div>
     <div class="fmt-row fmt-jackpot" style="${fmt==="jackpot"?"":"display:none"}">
+      <h4 style="margin:12px 0 6px">Fixed ticket prices</h4>
+      <div class="row"><label>Prices (comma-separated) <input class="f-prices" value="${(g.fixed_prices||[2,3,4,5]).join(", ")}" style="width:220px" placeholder="2, 3, 4, 5"></label>
+        <span class="note">Sell screen only offers these fixed amounts</span></div>
       <h4 style="margin:12px 0 6px">Jackpot pool</h4>
       <div class="row"><label>Minimum pool <input class="f-jmin" type="number" step="any" min="0" value="${g.jackpot_min??10000}" style="width:110px"></label>
         <label>Current pool <input class="f-jcur" type="number" step="any" min="0" value="${g.jackpot_current??g.jackpot_min??10000}" style="width:110px"></label>
@@ -587,8 +619,9 @@ class LotteryPosPanel extends HTMLElement{
       +`<div style="text-align:center;font-size:${Math.max(8,d.size-1)}px">${t.id}</div>`
       +(d.footer?`<div style="text-align:center;margin-top:6px">${esc(d.footer)}</div>`:"")+`</div>`}
 
-  paint(){const s=this.s,q=x=>this.shadowRoot.querySelector(x);if(s.tab!=="sell"||!q("#num"))return;const bt=this.bt(),cur=s.data.currency,g=this.primaryGame(),gfmt=this.gameFormat(g),dig=this.gameDigits(g);
-    if(gfmt==="jackpot"){
+  paint(){const s=this.s,q=x=>this.shadowRoot.querySelector(x);if(s.tab!=="sell"||!q("#num"))return;const bt=this.bt(),cur=s.data.currency,g=this.primaryGame(),gfmt=g?this.gameFormat(g):"digit",dig=g?this.gameDigits(g):4;
+    if(!g){q("#num").innerHTML=`<small>Game</small><span class="amtv" style="font-size:16px">Select a game</span>`;q("#amt").innerHTML=`<small>Amount ${cur}</small><span class="amtv">${s.amt||"0"}</span>`;}
+    else if(gfmt==="jackpot"){
       q("#num").innerHTML=`<small>Jackpot</small><span class="amtv" style="font-size:18px">${(s.balls||[]).join(" ")||"—"}${s.mega?" +"+s.mega:""}</span>`;
     }else{
       const label=gfmt==="zodiac"?`Zodiac ${dig}d`:(bt?bt.label:`${dig} digits`);
@@ -617,7 +650,7 @@ class LotteryPosPanel extends HTMLElement{
     else if(s.amt.length<7)s.amt=(s.amt==="0"?"":s.amt)+k;
     this.paint()}
   add(){const s=this.s,bt=this.bt(),amt=parseFloat(s.amt),g=this.primaryGame(),fmt=this.gameFormat(g),dig=this.gameDigits(g);
-    if(!g)return this.toast("Select a game",1);
+    if(!s.sel.length||!g)return this.toast("Select a game first",1);
     if(!(amt>0))return this.toast("Enter an amount",1);
     const minS=+(g.min_stake??bt?.min_stake??0.5), maxS=+(g.max_stake??bt?.max_stake??100);
     if(amt<minS||amt>maxS)return this.toast(`Amount must be ${minS}–${maxS}`,1);
@@ -637,6 +670,8 @@ class LotteryPosPanel extends HTMLElement{
       const mc=+g.main_count||5;
       if((s.balls||[]).length!==mc)return this.toast(`Pick ${mc} balls`,1);
       if((+g.mega_count||0)&&!s.mega)return this.toast("Pick mega ball",1);
+      const prices=(g.fixed_prices&&g.fixed_prices.length)?g.fixed_prices.map(Number):[2,3,4,5];
+      if(!prices.some(pr=>Math.abs(pr-amt)<1e-9))return this.toast(`Pick a fixed price: ${prices.join(", ")}`,1);
       line.bet_type="jackpot";line.balls=[...s.balls].sort();line.mega=s.mega||"";line.number=line.balls.join("-")+(line.mega?"+"+line.mega:"");
     }
     if(s.editIdx!=null){s.lines[s.editIdx]=line;s.editIdx=null;s.fresh=null;s.num="";s.balls=[];s.mega="";s.symbols=[];s.allZodiac=false;s.field="num";this.toast("Play updated");return this.render()}
@@ -656,6 +691,10 @@ class LotteryPosPanel extends HTMLElement{
         this.paint();break}
       case "mega":s.mega=s.mega===ds.v?"":ds.v;this.paint();break;
       case "editgame":s.editGame=s.editGame===ds.v?null:ds.v;this.render();break;
+      case "scrapejb":{this.toast("Fetching joeblack.online…");const r=await this.call("scrape_joeblack",{});
+        if(r){s.scrapeResult=r;s.data=await this.ws("state");
+          const n=(r.imported||[]).length,w=(r.imported||[]).reduce((a,x)=>a+(x.winners||0),0);
+          this.toast(`Imported ${n} game(s), ${w} winning ticket(s)`);this.render()}break}
       case "draws":s.draws=+ds.v||1;this.render();break;
       case "addjprize":{const c=this.shadowRoot.querySelector(`.gcard[data-id="${ds.v}"]`);if(!c)break;
         const box=c.querySelector(".jp-list");if(!box)break;
@@ -666,7 +705,7 @@ class LotteryPosPanel extends HTMLElement{
           <input class="jp-amt" type="number" step="any" min="0" value="100" style="width:100%">
           <button type="button" class="ghost" data-a="rmjprize">✕</button>`;
         box.appendChild(row);break}
-      case "tab":s.tab=ds.v;this.render();break;
+      case "tab":{s.tab=ds.v;if(ds.v==="sell"){s.sel=[];s.balls=[];s.mega="";s.symbols=[];s.num="";s.amt="";s.field="num"}this.render();break}
       case "game":{
         // Single-select: tap a game to sell that game only
         if(s.sel.length===1&&s.sel[0]===ds.v)break; // already selected
@@ -703,30 +742,36 @@ class LotteryPosPanel extends HTMLElement{
       case "redeem":{const id=await this.modal({title:"Pay winner",input:"Scan or type ticket number",ok:"Check ticket"});if(id)this.scanned(id);break}
       case "results":{const r=await this.call("draw_results",{date:s.date});if(r)this.print(`<html><body style="font:13px monospace;width:72mm"><h3>RESULTADO ${s.date}</h3>${r.map(x=>`<p><b>${x.game}</b><br>${x.numbers.join(" - ")}</p>`).join("")||"No results yet"}</body></html>`);break}
       case "report1":{const t=today(),r=await this.call("report",{date_from:t,date_to:t});if(r)this.print(this.reportHTML(r));break}
-      case "savegame":{const c=this.shadowRoot.querySelector(`.gcard[data-id="${ds.v}"]`);if(!c)break;const v=x=>c.querySelector(x),all=[...c.querySelectorAll(".f-bt")],pick=all.filter(i=>i.checked).map(i=>i.value);
-        const days=[...c.querySelectorAll(".f-day")].filter(i=>i.checked).map(i=>+i.value);if(!days.length)return this.toast("Pick at least one draw day",1);
+      case "savegame":{const c=this.shadowRoot.querySelector(`.gcard[data-id="${ds.v}"]`);if(!c)break;
+        const v=x=>c.querySelector(x);
+        const all=[...c.querySelectorAll(".f-bt")],pick=all.filter(i=>i.checked).map(i=>i.value);
+        const days=[...c.querySelectorAll(".f-day")].filter(i=>i.checked).map(i=>+i.value);
+        if(!days.length)return this.toast("Pick at least one draw day",1);
+        if(!v(".f-name")?.value?.trim())return this.toast("Game name required",1);
         const fmtSel=v(".f-fmt")?.value||"digit";
-        const jprizes=[...c.querySelectorAll(".jp-row")].map(row=>({
-          match:+row.querySelector(".jp-match")?.value||1,
-          mega:!!row.querySelector(".jp-mega")?.checked,
-          prize_type:row.querySelector(".jp-type")?.value||"fixed",
-          amount:+row.querySelector(".jp-amt")?.value||0
-        }));
-        const msg={game_id:String(ds.v),name:v(".f-name").value,color:v(".f-color").value,enabled:v(".f-en").checked,open_time:v(".f-open").value,cutoff:v(".f-cut").value,draw_time:v(".f-draw").value,bet_types:pick.length===all.length||!pick.length?[]:pick,draw_days:days.length===7?[]:days,
-          format:fmtSel,
-          digits:+(v(".f-digits")?.value||4),
-          main_count:+(v(".f-mc")?.value||5),
-          main_max:+(v(".f-mm")?.value||30),
-          mega_count:+(v(".f-mega")?.value||0),
-          mega_max:+(v(".f-mx")?.value||15),
-          min_stake:+(v(".f-mins")?.value||0.5),
-          max_stake:+(v(".f-maxs")?.value||100),
-          jackpot_min:+(v(".f-jmin")?.value||0),
-          jackpot_current:+(v(".f-jcur")?.value||0),
-          jackpot_contrib:(+(v(".f-jcon")?.value||0))/100,
-          jackpot_prizes:jprizes};
+        const msg={game_id:String(ds.v),name:v(".f-name").value,color:v(".f-color").value,enabled:!!v(".f-en")?.checked,
+          open_time:v(".f-open")?.value||"00:00",cutoff:v(".f-cut")?.value||"12:45",draw_time:v(".f-draw")?.value||"13:00",
+          bet_types:pick.length===all.length||!pick.length?[]:pick,draw_days:days.length===7?[]:days,
+          format:fmtSel,digits:+(v(".f-digits")?.value||4),
+          min_stake:+(v(".f-mins")?.value||0.5),max_stake:+(v(".f-maxs")?.value||100)};
+        if(fmtSel==="jackpot"){
+          const mc=+(v(".f-mc")?.value||5);
+          msg.main_count=mc;msg.main_max=+(v(".f-mm")?.value||30);
+          msg.mega_count=+(v(".f-mega")?.value||0);msg.mega_max=+(v(".f-mx")?.value||15);
+          msg.jackpot_min=+(v(".f-jmin")?.value||10000);
+          msg.jackpot_current=+(v(".f-jcur")?.value||msg.jackpot_min);
+          const rawCon=v(".f-jcon")?.value;msg.jackpot_contrib=((rawCon===""||rawCon==null)?20:+rawCon)/100;
+          msg.fixed_prices=(v(".f-prices")?.value||"2,3,4,5").split(/[,\s]+/).map(x=>parseFloat(x)).filter(x=>x>0);
+          msg.jackpot_prizes=[...c.querySelectorAll(".jp-row")].map(row=>{
+            let match=+(row.querySelector(".jp-match")?.value||1);if(match>mc)match=mc;if(match<1)match=1;
+            return {match,mega:!!row.querySelector(".jp-mega")?.checked,prize_type:row.querySelector(".jp-type")?.value||"fixed",amount:+(row.querySelector(".jp-amt")?.value||0)};
+          });
+          if(!msg.fixed_prices.length)msg.fixed_prices=[2,3,4,5];
+          msg.min_stake=Math.min(...msg.fixed_prices);msg.max_stake=Math.max(...msg.fixed_prices);
+        }
         if(s.glogos[ds.v]!==undefined)msg.logo=s.glogos[ds.v];
-        if(await this.call("update_game",msg)){delete s.glogos[ds.v];s.data=await this.ws("state");this.toast("Game saved");this.render()}break}
+        if(await this.call("update_game",msg)){delete s.glogos[ds.v];s.data=await this.ws("state");this.toast("Game saved");this.render()}
+        break}
       case "glogoclear":s.glogos[ds.v]="";this.toast("Logo is removed when you press Save");break;
       case "delgame":{if(!await this.modal({title:"Delete game?",text:"Only possible if it has no sales. Otherwise hide it instead.",ok:"Delete"}))break;if(await this.call("delete_game",{game_id:String(ds.v)})){s.data=await this.ws("state");this.toast("Game deleted");this.render()}break}
       case "savebt":{const r=this.shadowRoot.querySelector(`.btr[data-k="${ds.v}"]`);if(!r)break;if(await this.call("update_bet_type",{key:ds.v,label:r.querySelector(".b-label").value,multiplier:+r.querySelector(".b-mult").value,min_stake:+r.querySelector(".b-min").value,max_stake:+r.querySelector(".b-max").value,enabled:r.querySelector(".b-en").checked})){s.data=await this.ws("state");this.toast("Bet type saved");this.render()}break}

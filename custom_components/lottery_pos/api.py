@@ -71,6 +71,9 @@ def _draws(s, m): return s.draw_results(m["date"])
 @_cmd("report", {vol.Required("date_from"): str, vol.Required("date_to"): str})
 def _report(s, m): return s.report(m["date_from"], m["date_to"])
 
+@_cmd("scrape_joeblack", {vol.Optional("url", default="https://www.joeblack.online/"): str}, admin=True)
+def _scrape(s, m): return s.scrape_joeblack(m.get("url") or "https://www.joeblack.online/")
+
 @_cmd("set_results", {vol.Required("game"): str, vol.Required("date"): str, vol.Required("numbers"): [str]}, admin=True)
 def _results(s, m): return {"winners": s.set_results(m["game"], m["date"], m["numbers"])}
 
@@ -124,7 +127,7 @@ def _ticker(s, m): return s.set_ticker(m["text"], m["enabled"], m["speed"], m["c
     vol.Optional("min_stake"): vol.Coerce(float), vol.Optional("max_stake"): vol.Coerce(float),
     vol.Optional("jackpot_min"): vol.Coerce(float), vol.Optional("jackpot_current"): vol.Coerce(float),
     vol.Optional("jackpot_contrib"): vol.Coerce(float),
-    vol.Optional("jackpot_prizes"): list,
+    vol.Optional("jackpot_prizes"): list, vol.Optional("fixed_prices"): list,
 }, admin=True)
 def _upd_g(s, m): return s.update_game(m["game_id"], {k: v for k, v in m.items() if k not in ("game_id", "type")})
 

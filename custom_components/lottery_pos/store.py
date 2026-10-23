@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import calendar
+import json
+import urllib.request
 import copy
 import re
 import secrets
@@ -1004,6 +1006,89 @@ class LotteryStore:
         self._save()
         return self.data["settings"]["ticker"]
 
+    # ---------- external results scrape ----------
+    def scrape_joeblack(self, url: str = "https://www.joeblack.online/") -> dict:
+        """Fetch published results from joeblack.online and store matching local games.
+
+        Maps site names to local game names (case-insensitive, partial match).
+        Returns summary of imported draws for validation against sold tickets.
+        """
+        try:
+            req = urllib.request.Request(url, headers={"User-Agent": "LotteryPOS/1.0"})
+            with urllib.request.urlopen(req, timeout=20) as resp:
+                html = resp.read().decode("utf-8", errors="ignore")
+        except Exception as err:
+            raise LotteryError(f"Could not fetch results: {err}") from err
+
+        # Date like "Thu - Oct 22, 2026"
+        date_match = re.search(
+            r"(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)\s*-\s*([A-Za-z]{3})\s+(\d{1,2}),\s*(\d{4})",
+            html,
+        )
+        draw_date = None
+        if date_match:
+            mon, day, year = date_match.group(1), date_match.group(2), date_match.group(3)
+            months = {m: i for i, m in enumerate(
+                ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"], 1)}
+            if mon in months:
+                draw_date = f"{year}-{months[mon]:02d}-{int(day):02d}"
+        if not draw_date:
+            draw_date = dt_util.now().date().isoformat()
+
+        blocks = re.findall(
+            r'winner-name[^>]*>([^<]+)</span>.*?number-list[^>]*>(.*?)</ul>',
+            html,
+            re.S | re.I,
+        )
+        games_by_name = {g["name"].lower(): g for g in self.data["games"]}
+        # aliases for common site names
+        aliases = {
+            "w.n.k.": "wnk", "wnk": "wnk", "diario": "diario", "flamingo": "flamingo",
+            "super-4": "super4", "super 4": "super4", "super4": "super4",
+            "philipsburg evening": "philb_pm", "philipsburg midday": "philb_am",
+            "philipsburg evening": "philbpm", "corsow": "corsow",
+        }
+        imported, skipped, winners_all = [], [], []
+        for raw_name, body in blocks:
+            name = re.sub(r"\s+", " ", raw_name.strip())
+            nums = re.findall(r"<li>(\d+)</li>", body, re.I)
+            if not nums:
+                skipped.append({"name": name, "reason": "no numbers"})
+                continue
+            key = name.lower()
+            game = games_by_name.get(key)
+            if not game:
+                # partial / alias
+                aid = aliases.get(key)
+                if aid:
+                    game = next((g for g in self.data["games"] if g["id"] == aid or g["name"].lower() == aid), None)
+                if not game:
+                    for g in self.data["games"]:
+                        if key in g["name"].lower() or g["name"].lower() in key:
+                            game = g
+                            break
+            if not game:
+                skipped.append({"name": name, "reason": "no matching local game"})
+                continue
+            try:
+                winners = self.set_results(game["id"], draw_date, nums)
+            except LotteryError as err:
+                skipped.append({"name": name, "reason": str(err)})
+                continue
+            imported.append({
+                "game": game["name"], "game_id": game["id"], "date": draw_date,
+                "numbers": nums, "winners": len(winners),
+            })
+            winners_all.extend(winners)
+        return {
+            "source": url,
+            "date": draw_date,
+            "imported": imported,
+            "skipped": skipped,
+            "winners": [self.public(w) if isinstance(w, dict) and "id" in w else w for w in winners_all],
+        }
+
+
     def update_game(self, gid: str, f: dict) -> dict:
         g = self._find("games", "id", gid, "game")
         new = dict(g)
@@ -1061,6 +1146,16 @@ class LotteryStore:
                 new[k] = round(v, 2)
         if "min_stake" in new and "max_stake" in new and new["max_stake"] < new["min_stake"]:
             raise LotteryError("max_stake must be ≥ min_stake")
+        if "fixed_prices" in f:
+            prices = []
+            for x in f.get("fixed_prices") or []:
+                try:
+                    v = float(x)
+                except (TypeError, ValueError):
+                    continue
+                if v > 0:
+                    prices.append(round(v, 2))
+            new["fixed_prices"] = sorted(set(prices)) or [2.0, 3.0, 4.0, 5.0]
         if "jackpot_prizes" in f:
             raw = f.get("jackpot_prizes") or []
             if not isinstance(raw, list):
@@ -1154,6 +1249,7 @@ class LotteryStore:
             "jackpot_current": float(fields.get("jackpot_current") or fields.get("jackpot_min") or 10000),
             "jackpot_contrib": float(fields.get("jackpot_contrib") or 0.2),
             "jackpot_prizes": list(fields.get("jackpot_prizes") or []),
+            "fixed_prices": list(fields.get("fixed_prices") or [2, 3, 4, 5]),
         }
         if g["format"] not in ("digit", "zodiac", "jackpot"):
             raise LotteryError("Format must be digit, zodiac or jackpot")
