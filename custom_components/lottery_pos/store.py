@@ -5,7 +5,7 @@ import calendar
 import copy
 import re
 import secrets
-from datetime import date as _date
+from datetime import date as _date, timedelta
 
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.dispatcher import async_dispatcher_send
@@ -216,19 +216,40 @@ class LotteryStore:
                     line["mega"] = ""
             else:
                 raise LotteryError(f"Unknown game format: {fmt}")
+            # stake limits: game override, else bet type
+            min_s = float(game.get("min_stake") or bt.get("min_stake") or 0.01)
+            max_s = float(game.get("max_stake") or bt.get("max_stake") or 1_000_000)
+            if amt < min_s or amt > max_s:
+                raise LotteryError(f"Amount for {game['name']} must be {min_s:g}–{max_s:g}")
             try:
-                wd = _date.fromisoformat(line["date"]).weekday()
-            except ValueError as err:
-                raise LotteryError("Invalid draw date") from err
-            if game.get("draw_days") and wd not in game["draw_days"]:
-                raise LotteryError(f"{game['name']} has no draw on {calendar.day_name[wd]}")
-            if self._closed(line):
-                raise LotteryError(f"{game['name']} is closed for {line['date']}")
-            if line["date"] == dt_util.now().date().isoformat() and dt_util.now().strftime("%H:%M") < game["open_time"]:
-                raise LotteryError(f"{game['name']} opens at {game['open_time']}")
-            if f"{game['id']}|{line['date']}" in self.data["results"]:
-                raise LotteryError(f"{game['name']} {line['date']} already drawn")
-            clean.append(line)
+                multi = max(1, min(28, int(ln.get("draws") or ln.get("multi_draw") or 1)))
+            except (TypeError, ValueError):
+                multi = 1
+            base_date = line["date"]
+            dates = self._multi_draw_dates(game, base_date, multi)
+            for d in dates:
+                one = dict(line)
+                one["date"] = d
+                try:
+                    wd = _date.fromisoformat(d).weekday()
+                except ValueError as err:
+                    raise LotteryError("Invalid draw date") from err
+                if game.get("draw_days") and wd not in game["draw_days"]:
+                    raise LotteryError(f"{game['name']} has no draw on {calendar.day_name[wd]}")
+                if self._closed(one):
+                    raise LotteryError(f"{game['name']} is closed for {d}")
+                if d == dt_util.now().date().isoformat() and dt_util.now().strftime("%H:%M") < game.get("open_time", "00:00"):
+                    raise LotteryError(f"{game['name']} opens at {game['open_time']}")
+                if f"{game['id']}|{d}" in self.data["results"]:
+                    raise LotteryError(f"{game['name']} {d} already drawn")
+                one["draws"] = multi
+                clean.append(one)
+            # progressive jackpot: contribute per play (once per multi-draw purchase unit)
+            if fmt == "jackpot":
+                contrib = float(game.get("jackpot_contrib") or 0)
+                if contrib > 0:
+                    add = round(amt * multi * contrib, 2)
+                    game["jackpot_current"] = round(float(game.get("jackpot_current") or game.get("jackpot_min") or 0) + add, 2)
         now = dt_util.now()
         self.data["seq"] += 1
         tid = f"{now:%y%m%d}{self.data['seq'] % 10000:04d}{secrets.randbelow(10**8):08d}"
@@ -240,6 +261,25 @@ class LotteryStore:
         self._save()
         self.hass.bus.async_fire(f"{DOMAIN}_ticket_sold", {"ticket_id": tid, "retailer_id": retailer["id"], "total": ticket["total"]})
         return self.public(ticket)
+
+    def _multi_draw_dates(self, game: dict, start: str, count: int) -> list[str]:
+        """Next `count` valid draw dates starting at start (inclusive)."""
+        try:
+            d0 = _date.fromisoformat(start)
+        except ValueError as err:
+            raise LotteryError("Invalid draw date") from err
+        days = game.get("draw_days") or []
+        out = []
+        cur = d0
+        guard = 0
+        while len(out) < count and guard < 400:
+            guard += 1
+            if not days or cur.weekday() in days:
+                out.append(cur.isoformat())
+            cur = cur + timedelta(days=1)
+        if len(out) < count:
+            raise LotteryError("Could not schedule multi-draw dates")
+        return out
 
     def _apply_promotions(self, lines: list[dict]) -> list[dict]:
         """Award promotion codes for every enabled promo whose trigger is met.
@@ -384,16 +424,37 @@ class LotteryStore:
             drawn_main = set(f"{int(x):02d}" for x in nums[:main_count])
             play_main = set(ln.get("balls") or [])
             matched = len(drawn_main & play_main)
-            mega_ok = True
+            mega_hit = False
             if mega_count:
                 if len(nums) < main_count + 1:
                     return 0.0
                 drawn_mega = f"{int(nums[main_count]):02d}"
-                mega_ok = (ln.get("mega") or "") == drawn_mega
-            # simple tier: full main (+ mega if required) pays multiplier
-            if matched == main_count and mega_ok:
-                return round(ln["amount"] * float(bt.get("multiplier", 1)), 2)
-            return 0.0
+                mega_hit = (ln.get("mega") or "") == drawn_mega
+            prizes = game.get("jackpot_prizes") or []
+            # best matching tier: highest match, then mega preference
+            best = None
+            for pr in prizes:
+                need = int(pr.get("match") or 0)
+                need_mega = bool(pr.get("mega"))
+                if matched < need:
+                    continue
+                if need_mega and not mega_hit:
+                    continue
+                if best is None or need > int(best.get("match") or 0) or (
+                    need == int(best.get("match") or 0) and need_mega and not best.get("mega")
+                ):
+                    best = pr
+            if not best:
+                return 0.0
+            ptype = best.get("prize_type") or "fixed"
+            if ptype == "jackpot":
+                pool = float(game.get("jackpot_current") or game.get("jackpot_min") or 0)
+                # reset pool to minimum after win (caller settles one winner; simple model)
+                game["jackpot_current"] = float(game.get("jackpot_min") or 0)
+                return round(pool, 2)
+            if ptype == "multiplier":
+                return round(ln["amount"] * float(best.get("amount") or bt.get("multiplier") or 1), 2)
+            return round(float(best.get("amount") or 0), 2)
         # digit / classic
         n, first, mode, d = ln["number"], nums[0], bt["mode"], bt["digits"]
         if mode == "exact":
@@ -989,6 +1050,43 @@ class LotteryStore:
             if bad:
                 raise LotteryError(f"Unknown symbols: {', '.join(bad)}")
             new["symbols"] = syms or [z["id"] for z in ZODIAC_SYMBOLS]
+        for k in ("min_stake", "max_stake", "jackpot_min", "jackpot_current", "jackpot_contrib"):
+            if k in f:
+                try:
+                    v = float(f[k])
+                except (TypeError, ValueError) as err:
+                    raise LotteryError(f"Invalid {k}") from err
+                if v < 0:
+                    raise LotteryError(f"{k} must be ≥ 0")
+                new[k] = round(v, 2)
+        if "min_stake" in new and "max_stake" in new and new["max_stake"] < new["min_stake"]:
+            raise LotteryError("max_stake must be ≥ min_stake")
+        if "jackpot_prizes" in f:
+            raw = f.get("jackpot_prizes") or []
+            if not isinstance(raw, list):
+                raise LotteryError("jackpot_prizes must be a list")
+            cleaned = []
+            mc = int(new.get("main_count") or 5)
+            for i, pr in enumerate(raw):
+                if not isinstance(pr, dict):
+                    raise LotteryError(f"Prize tier #{i+1} invalid")
+                match = int(pr.get("match") or 0)
+                if not 1 <= match <= mc:
+                    raise LotteryError(f"Prize match must be 1–{mc} (main balls)")
+                ptype = str(pr.get("prize_type") or "fixed")
+                if ptype not in ("jackpot", "fixed", "multiplier"):
+                    raise LotteryError("prize_type must be jackpot, fixed or multiplier")
+                try:
+                    amount = float(pr.get("amount") or 0)
+                except (TypeError, ValueError) as err:
+                    raise LotteryError("Invalid prize amount") from err
+                cleaned.append({
+                    "match": match,
+                    "mega": bool(pr.get("mega")),
+                    "prize_type": ptype,
+                    "amount": round(amount, 2),
+                })
+            new["jackpot_prizes"] = cleaned
         g.clear()
         g.update(new)
         self._save()
@@ -1002,11 +1100,26 @@ class LotteryStore:
         self.data["games"].remove(g)
         self._save()
 
-    def update_bet_type(self, key: str, label: str, multiplier: float, enabled: bool) -> dict:
+    def update_bet_type(self, key: str, fields: dict) -> dict:
         b = self._find("bet_types", "key", key, "bet type")
-        if not label.strip() or multiplier <= 0:
-            raise LotteryError("Label and a payout above 0 are required")
-        b.update({"label": label.strip(), "multiplier": multiplier, "enabled": bool(enabled)})
+        label = str(fields.get("label", b.get("label", ""))).strip()
+        try:
+            multiplier = float(fields.get("multiplier", b.get("multiplier", 1)))
+            min_stake = float(fields.get("min_stake", b.get("min_stake", 0.5)))
+            max_stake = float(fields.get("max_stake", b.get("max_stake", 100)))
+        except (TypeError, ValueError) as err:
+            raise LotteryError("Invalid payout or stake") from err
+        if not label or multiplier <= 0:
+            raise LotteryError("Label required and payout must be > 0")
+        if min_stake < 0 or max_stake < min_stake:
+            raise LotteryError("Stake range invalid (min ≤ max)")
+        b.update({
+            "label": label[:40],
+            "multiplier": multiplier,
+            "min_stake": round(min_stake, 2),
+            "max_stake": round(max_stake, 2),
+            "enabled": bool(fields.get("enabled", b.get("enabled", True))),
+        })
         self._save()
         return b
 
@@ -1035,6 +1148,12 @@ class LotteryStore:
             "mega_count": int(fields.get("mega_count") or 0),
             "mega_max": int(fields.get("mega_max") or 15),
             "symbols": list(fields.get("symbols") or [z["id"] for z in ZODIAC_SYMBOLS]),
+            "min_stake": float(fields.get("min_stake") or 0.5),
+            "max_stake": float(fields.get("max_stake") or 100),
+            "jackpot_min": float(fields.get("jackpot_min") or 10000),
+            "jackpot_current": float(fields.get("jackpot_current") or fields.get("jackpot_min") or 10000),
+            "jackpot_contrib": float(fields.get("jackpot_contrib") or 0.2),
+            "jackpot_prizes": list(fields.get("jackpot_prizes") or []),
         }
         if g["format"] not in ("digit", "zodiac", "jackpot"):
             raise LotteryError("Format must be digit, zodiac or jackpot")

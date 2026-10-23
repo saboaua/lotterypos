@@ -6,7 +6,7 @@ PANEL_URL = "lottery-pos"
 STATIC_URL = "/lottery_pos_static/lottery-panel.js"
 SIGNAL_UPDATE = f"{DOMAIN}_update"
 PLATFORMS = ["sensor"]
-VERSION = "0.8.1"
+VERSION = "0.8.2"
 
 # Chinese zodiac (common in Caribbean / Asian number games)
 ZODIAC_SYMBOLS = [
@@ -43,15 +43,15 @@ DEFAULT_GAMES = [
 
 # mode: exact | perm | bf | back | chances  (see README). multiplier = payout per 1.00 staked.
 DEFAULT_BET_TYPES = [
-    {"key": "4_cifra", "label": "4 Cifra", "digits": 4, "mode": "exact", "multiplier": 5000},
-    {"key": "3_cifra", "label": "3 Cifra", "digits": 3, "mode": "exact", "multiplier": 500},
-    {"key": "2_cifra_3ch", "label": "2 Cifra 3CH", "digits": 2, "mode": "chances", "multiplier": 20},
-    {"key": "4_skina", "label": "4 Skina", "digits": 4, "mode": "perm", "multiplier": 200},
-    {"key": "3_skina", "label": "3 Skina", "digits": 3, "mode": "perm", "multiplier": 80},
-    {"key": "2_cifra_bf", "label": "2 Cifra B/F", "digits": 2, "mode": "bf", "multiplier": 40},
-    {"key": "2_cifra_b", "label": "2 Cifra B", "digits": 2, "mode": "back", "multiplier": 70},
-    {"key": "zodiac", "label": "Zodiac", "digits": 2, "mode": "zodiac", "multiplier": 50},
-    {"key": "jackpot", "label": "Jackpot", "digits": 0, "mode": "jackpot", "multiplier": 1},
+    {"key": "4_cifra", "label": "4 Cifra", "digits": 4, "mode": "exact", "multiplier": 5000, "min_stake": 0.5, "max_stake": 100},
+    {"key": "3_cifra", "label": "3 Cifra", "digits": 3, "mode": "exact", "multiplier": 500, "min_stake": 0.5, "max_stake": 100},
+    {"key": "2_cifra_3ch", "label": "2 Cifra 3CH", "digits": 2, "mode": "chances", "multiplier": 20, "min_stake": 0.5, "max_stake": 50},
+    {"key": "4_skina", "label": "4 Skina", "digits": 4, "mode": "perm", "multiplier": 200, "min_stake": 0.5, "max_stake": 100},
+    {"key": "3_skina", "label": "3 Skina", "digits": 3, "mode": "perm", "multiplier": 80, "min_stake": 0.5, "max_stake": 100},
+    {"key": "2_cifra_bf", "label": "2 Cifra B/F", "digits": 2, "mode": "bf", "multiplier": 40, "min_stake": 0.5, "max_stake": 50},
+    {"key": "2_cifra_b", "label": "2 Cifra B", "digits": 2, "mode": "back", "multiplier": 70, "min_stake": 0.5, "max_stake": 50},
+    {"key": "zodiac", "label": "Zodiac", "digits": 2, "mode": "zodiac", "multiplier": 50, "min_stake": 1, "max_stake": 50},
+    {"key": "jackpot", "label": "Jackpot", "digits": 0, "mode": "jackpot", "multiplier": 1, "min_stake": 1, "max_stake": 20},
 ]
 
 TICKET_DEFAULTS = {

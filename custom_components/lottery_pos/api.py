@@ -15,6 +15,8 @@ _LINE = vol.Schema({
     vol.Optional("symbols", default=[]): [str],
     vol.Optional("balls", default=[]): [str],
     vol.Optional("mega", default=""): str,
+    vol.Optional("draws", default=1): vol.Coerce(int),
+    vol.Optional("multi_draw", default=1): vol.Coerce(int),
 }, extra=vol.ALLOW_EXTRA)
 
 
@@ -119,6 +121,10 @@ def _ticker(s, m): return s.set_ticker(m["text"], m["enabled"], m["speed"], m["c
     vol.Optional("main_count"): vol.Coerce(int), vol.Optional("main_max"): vol.Coerce(int),
     vol.Optional("mega_count"): vol.Coerce(int), vol.Optional("mega_max"): vol.Coerce(int),
     vol.Optional("symbols"): [str],
+    vol.Optional("min_stake"): vol.Coerce(float), vol.Optional("max_stake"): vol.Coerce(float),
+    vol.Optional("jackpot_min"): vol.Coerce(float), vol.Optional("jackpot_current"): vol.Coerce(float),
+    vol.Optional("jackpot_contrib"): vol.Coerce(float),
+    vol.Optional("jackpot_prizes"): list,
 }, admin=True)
 def _upd_g(s, m): return s.update_game(m["game_id"], {k: v for k, v in m.items() if k not in ("game_id", "type")})
 
@@ -127,9 +133,16 @@ def _del_g(s, m):
     s.delete_game(m["game_id"])
     return {}
 
-@_cmd("update_bet_type", {vol.Required("key"): str, vol.Required("label"): str,
-                          vol.Required("multiplier"): vol.Coerce(float), vol.Required("enabled"): bool}, admin=True)
-def _upd_b(s, m): return s.update_bet_type(m["key"], m["label"], m["multiplier"], m["enabled"])
+@_cmd("update_bet_type", {
+    vol.Required("key"): str,
+    vol.Required("label"): str,
+    vol.Required("multiplier"): vol.Coerce(float),
+    vol.Required("enabled"): bool,
+    vol.Optional("min_stake"): vol.Coerce(float),
+    vol.Optional("max_stake"): vol.Coerce(float),
+}, admin=True)
+def _upd_b(s, m):
+    return s.update_bet_type(m["key"], {k: v for k, v in m.items() if k not in ("key", "type")})
 
 @_cmd("set_ticket_design", {vol.Required("design"): dict}, admin=True)
 def _design(s, m): return s.set_ticket_design(m["design"])

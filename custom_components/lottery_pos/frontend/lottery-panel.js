@@ -154,6 +154,20 @@ table{width:100%;border-collapse:collapse;font-size:13px}td,th{padding:9px 6px;b
 .fmt-tag{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;opacity:.85}
 .fmt-panel{margin:8px 0;padding:10px 12px;border-radius:14px;background:var(--key);border:1px solid var(--line)}
 .fmt-panel h5{margin:0 0 6px;font-size:12px;color:var(--mut);text-transform:uppercase;letter-spacing:.05em}
+.glist{display:flex;flex-direction:column;gap:8px}
+.glist-item{border:1px solid var(--line);border-radius:16px;background:var(--card);overflow:hidden;box-shadow:var(--sh)}
+.glist-head{display:flex;align-items:center;gap:12px;padding:12px 14px;cursor:pointer;width:100%;text-align:left;background:transparent;color:var(--ink)}
+.glist-head:hover{background:var(--key)}
+.glist-head .dot{width:14px;height:14px;border-radius:50%;flex-shrink:0}
+.glist-head .meta{flex:1;min-width:0}
+.glist-head .meta b{display:block;font-size:15px}
+.glist-head .meta small{color:var(--mut);font-size:12px}
+.glist-body{padding:0 14px 14px;border-top:1px solid var(--line)}
+.draw-sel{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin:6px 0}
+.draw-sel button{min-width:40px;height:36px;border-radius:10px;background:var(--key);color:var(--ink);font-weight:700;border:2px solid var(--line)}
+.draw-sel button.on{background:linear-gradient(135deg,var(--pri),var(--pri2));color:#fff;border-color:transparent}
+.jprize-row{display:grid;grid-template-columns:70px 90px 110px 1fr 36px;gap:6px;align-items:center;margin-bottom:6px}
+
 
 .ret-card{border:1px solid var(--line);border-radius:20px;padding:16px;margin-bottom:14px;background:var(--card);box-shadow:var(--sh)}
 .ret-card h4{margin:0 0 4px;font-size:16px;display:flex;align-items:center;gap:8px}
@@ -174,7 +188,7 @@ button{cursor:pointer;border:none;font-family:inherit}
 
 class LotteryPosPanel extends HTMLElement{
   constructor(){super();this.attachShadow({mode:"open"});
-    this.s={tab:"sell",sel:[],bt:"",date:today(),num:"",amt:"",field:"num",lines:[],retailer:"",data:null,scan:"",report:null,glogos:{},sub:"games",symbols:[],balls:[],mega:"",allZodiac:false};
+    this.s={tab:"sell",sel:[],bt:"",date:today(),num:"",amt:"",field:"num",lines:[],retailer:"",data:null,scan:"",report:null,glogos:{},sub:"games",symbols:[],balls:[],mega:"",allZodiac:false,draws:1,editGame:null};
     this._kh=e=>this.onKey(e)}
   connectedCallback(){window.addEventListener("keydown",this._kh)}
   disconnectedCallback(){window.removeEventListener("keydown",this._kh);clearInterval(this._tm)}
@@ -183,7 +197,8 @@ class LotteryPosPanel extends HTMLElement{
   ws(type,extra={}){return this._hass.callWS({type:"lottery_pos/"+type,...extra})}
   async init(){const s=this.s;try{s.dark=localStorage.getItem("lottery_pos_dark")==="1"}catch(e){}
     s.data=await this.ws("state");this._tm=setInterval(()=>this.tick(),30000);s.sel=[s.data.games[0]?.id];s.bt=s.data.bet_types[0]?.key;s.retailer=s.data.retailers[0]?.id;
-    this.shadowRoot.addEventListener("click",e=>{const el=e.target.closest("[data-a]");if(!el)return;if(el.dataset.a==="rmprizerow"||el.dataset.a==="rmnprizerow"){const row=el.closest(".p-prize-row,.n-prize-row");if(row){const box=row.parentElement;if(box&&box.querySelectorAll(".p-prize-row,.n-prize-row").length>1)row.remove();else this.toast("Keep at least one prize row",1)}return}this.act(el.dataset.a,el.dataset)});
+    this.shadowRoot.addEventListener("click",e=>{const el=e.target.closest("[data-a]");if(!el)return;if(el.dataset.a==="rmprizerow"||el.dataset.a==="rmnprizerow"){const row=el.closest(".p-prize-row,.n-prize-row");if(row){const box=row.parentElement;if(box&&box.querySelectorAll(".p-prize-row,.n-prize-row").length>1)row.remove();else this.toast("Keep at least one prize row",1)}return}
+      if(el.dataset.a==="rmjprize"){const row=el.closest(".jp-row");if(row)row.remove();return}this.act(el.dataset.a,el.dataset)});
     this.render()}
   bt(){return this.s.data.all_bet_types.find(b=>b.key===this.s.bt)}
   primaryGame(){const s=this.s;return s.data.all_games.find(g=>g.id===s.sel[0])||s.data.games[0]}
@@ -230,6 +245,8 @@ class LotteryPosPanel extends HTMLElement{
     this.shadowRoot.querySelectorAll(".f-file").forEach(inp=>inp.onchange=async e=>{const f=e.target.files[0];if(!f)return;try{s.glogos[inp.dataset.id]=await this.shrink(f,96);this.toast("Logo ready - press Save on the game")}catch(x){this.toast(x.message,1)}});
     this.shadowRoot.querySelectorAll(".d-f").forEach(el=>{const h=()=>{const k=el.dataset.k,d=this.design();d[k]=el.type==="checkbox"?el.checked:["size","qr_size","width","logo_height"].includes(k)?+el.value:el.value;this.refreshPreview()};el.addEventListener("input",h);el.addEventListener("change",h)});
     this.refreshPreview();this.paint();
+    const dc=this.shadowRoot.querySelector("#draws-custom");
+    if(dc){dc.onchange=e=>{s.draws=Math.max(1,Math.min(28,+e.target.value||1));this.render()};dc.onkeydown=e=>{if(e.key==="Enter"){s.draws=Math.max(1,Math.min(28,+dc.value||1));this.render()}}}
     // Format-specific fields in back office
     this.shadowRoot.querySelectorAll(".f-fmt").forEach(sel=>{
       sel.onchange=()=>{
@@ -264,7 +281,8 @@ class LotteryPosPanel extends HTMLElement{
     if(fmt==="jackpot"){
       const mc=+g.main_count||5, mm=+g.main_max||30, mega=+g.mega_count||0, mx=+g.mega_max||15;
       const balls=s.balls||[];
-      return `<div class="fmt-panel"><h5>Jackpot · pick ${mc} from 01–${String(mm).padStart(2,"0")}${mega?` + mega 01–${String(mx).padStart(2,"0")}`:""}</h5>
+      const pool=Number(g.jackpot_current||g.jackpot_min||0);
+      return `<div class="fmt-panel"><h5>Jackpot · pick ${mc} from 01–${String(mm).padStart(2,"0")}${mega?` + mega 01–${String(mx).padStart(2,"0")}`:""} · pool <b>${this.s.data.currency} ${pool.toFixed(0)}</b></h5>
         <div class="ball-grid">${Array.from({length:mm},(_,i)=>{const v=String(i+1).padStart(2,"0");return `<button type="button" class="bchip ${balls.includes(v)?"on":""}" data-a="ball" data-v="${v}">${v}</button>`}).join("")}</div>
         ${mega?`<h5>Mega ball</h5><div class="ball-grid">${Array.from({length:mx},(_,i)=>{const v=String(i+1).padStart(2,"0");return `<button type="button" class="bchip mega ${s.mega===v?"on":""}" data-a="mega" data-v="${v}">${v}</button>`}).join("")}</div>`:""}
         <span class="note">${balls.length}/${mc} main${mega?` · mega ${s.mega||"—"}`:""}</span></div>`;
@@ -290,6 +308,10 @@ class LotteryPosPanel extends HTMLElement{
     <div class="games">${games}</div>
     <div class="ctl"><input type="date" id="date" value="${s.date}" min="${today()}"><div class="bts">${ok.map(b=>`<button class="bt ${b.key===s.bt?"on":""}" data-a="bt" data-v="${b.key}">${b.label}</button>`).join("")}</div></div>
     ${this.formatPanelHTML()}
+    <div class="row" style="margin:8px 0"><span class="note">Multi-draw</span>
+      <div class="draw-sel">${[1,2,3,4,5,6,7,14].map(n=>`<button type="button" class="${(s.draws||1)===n?"on":""}" data-a="draws" data-v="${n}">${n}</button>`).join("")}
+      <input type="number" id="draws-custom" min="1" max="28" value="${s.draws||1}" style="width:60px;height:36px;border-radius:10px;border:1px solid var(--line);padding:0 8px" title="Custom draws">
+      <span class="note">draws · total ×${s.draws||1}</span></div></div>
     <div class="entry"><div id="num" class="disp" data-a="field" data-v="num"></div><div id="amt" class="disp" data-a="field" data-v="amt"></div>${s.editIdx!=null?`<div class="editbar">✎ Editing play ${s.editIdx+1} — type the new number / amount, then press Update</div><button class="add upd" data-a="add">✔ Update play</button><button class="cancel" data-a="canceledit" style="grid-column:1/-1">Cancel edit</button>`:`<button class="add" data-a="add">＋ Add to ticket</button>`}</div>
     <div class="pads"><div class="pad">${[1,2,3,4,5,6,7,8,9,"CLR",0,"DEL"].map(k=>`<button data-a="key" data-v="${k}">${k}</button>`).join("")}</div>
       <div class="pre">${PRESETS.map(p=>`<button data-a="preset" data-v="${p}">${p}</button>`).join("")}</div></div>
@@ -316,35 +338,77 @@ class LotteryPosPanel extends HTMLElement{
       <h4>By game</h4>${r.games.length?`<table><tr><th>Game</th><th>Tickets</th><th>Sales</th><th>Prizes</th><th>Net</th></tr>${r.games.map(x=>`<tr><td>${esc(x.game)}</td><td>${x.tickets}</td><td>${fmt(x.sales)}</td><td>${fmt(x.prizes)}</td><td class="${x.net>=0?"pos":"neg"}">${fmt(x.net)}</td></tr>`).join("")}</table>`:`<div class="empty">No sales in this range</div>`}</div>`}
   subTabs(){const s=this.s,t=[["games","mdi:calendar-clock","Games & schedule"],["brand","mdi:palette-outline","Branding & message"],["ticket","mdi:receipt-text-outline","Ticket design"],["promos","mdi:gift-outline","Promotions"],["results","mdi:trophy-outline","Results & winners"],["reports","mdi:chart-box-outline","Reports"],["retailers","mdi:store-outline","Retailers"]];
     return `<div class="subtabs">${t.map(x=>`<button class="${s.sub===x[0]?"on":""}" data-a="sub" data-v="${x[0]}"><ha-icon icon="${x[1]}"></ha-icon>${x[2]}</button>`).join("")}</div>`}
-  officeBody(){const f={games:()=>this.gamesCard()+this.btCard()+this.addGameCard(),brand:()=>this.brandCard()+this.tickerCard(),ticket:()=>this.designCard(),promos:()=>this.promosCard(),results:()=>this.resultsHTML(),reports:()=>this.reportsHTML(),retailers:()=>this.retailersCard()};return (f[this.s.sub]||f.games)()}
+  officeBody(){const f={games:()=>this.gamesCard()+this.addGameCard()+this.btCard(),brand:()=>this.brandCard()+this.tickerCard(),ticket:()=>this.designCard(),promos:()=>this.promosCard(),results:()=>this.resultsHTML(),reports:()=>this.reportsHTML(),retailers:()=>this.retailersCard()};return (f[this.s.sub]||f.games)()}
   tickerCard(){const t=this.s.data.settings.ticker||{},cols=[["#39ff14","Green"],["#ffb000","Amber"],["#ff3b3b","Red"],["#ffffff","White"],["#22d3ee","Cyan"]];return `<div class="card"><h3>Scrolling message</h3>
     <div class="row"><input id="tt" value="${esc(t.text)}" style="flex:1;min-width:220px" maxlength="200" placeholder="Message for the scrolling display"></div>
     <div class="row"><label>Speed <select id="ts">${[1,2,3,4,5,6,7,8,9,10].map(n=>`<option ${n===t.speed?"selected":""}>${n}</option>`).join("")}</select></label>
     <label>Color <select id="tc">${cols.map(c=>`<option value="${c[0]}" ${c[0]===t.color?"selected":""}>${c[1]}</option>`).join("")}</select></label>
     <label><input type="checkbox" id="te" ${t.enabled?"checked":""}> Show on screen</label></div><button data-a="saveticker">Save message</button></div>`}
-  gamesCard(){const d=this.s.data;return `<div class="card" style="grid-column:1/-1"><h3>Games &amp; draw schedule</h3>
-    <p class="note">Format: <b>Digit</b> (0000–9999 etc.), <b>Zodiac</b> (number + symbols), or <b>Jackpot</b> (e.g. 5 from 30 + optional mega).</p>
-    <div class="gl">${d.all_games.map(g=>{
+  gamesCard(){const s=this.s,d=s.data,openId=s.editGame;
+    const list=(d.all_games||[]).map(g=>{
       const fmt=g.format||"digit";
-      return `<div class="gcard" data-id="${g.id}" style="--c:${g.color}">
-    <div class="row"><input class="f-name" value="${esc(g.name)}" style="flex:1;min-width:120px"><input type="color" class="f-color" value="${g.color}"><label><input type="checkbox" class="f-en" ${g.enabled!==false?"checked":""}> Show on sell screen</label></div>
-    <div class="row"><label>Format <select class="f-fmt" data-a="gfmtpreview">
-      <option value="digit" ${fmt==="digit"?"selected":""}>Digit number (e.g. 0000–9999)</option>
+      const tag=fmt==="digit"?`${g.digits||4}-digit`:fmt==="zodiac"?`zodiac ${g.digits||2}d`:`JP ${g.main_count||5}/${g.main_max||30}${g.mega_count?"+M":""}`;
+      const open=openId===g.id;
+      return `<div class="glist-item">
+        <button type="button" class="glist-head" data-a="editgame" data-v="${esc(g.id)}">
+          <span class="dot" style="background:${g.color}"></span>
+          <span class="meta"><b>${esc(g.name)}</b><small>${tag} · draw ${g.draw_time} · cut ${g.cutoff}${fmt==="jackpot"?` · pool ${d.currency} ${Number(g.jackpot_current||g.jackpot_min||0).toFixed(0)}`:""}</small></span>
+          <ha-icon icon="${open?"mdi:chevron-up":"mdi:chevron-down"}"></ha-icon>
+        </button>
+        ${open?this.gameConfigHTML(g):""}
+      </div>`}).join("")||`<div class="empty">No games yet</div>`;
+    return `<div class="card" style="grid-column:1/-1"><h3>Games</h3>
+      <p class="note">Tap a game to open its configuration. Format controls digit range, zodiac, or jackpot ball rules and prizes.</p>
+      <div class="glist">${list}</div></div>`}
+  gameConfigHTML(g){const d=this.s.data,fmt=g.format||"digit",cur=d.currency||"";
+    const prizes=g.jackpot_prizes||[];
+    const prizeRows=(prizes.length?prizes:[{match:g.main_count||5,mega:!!g.mega_count,prize_type:"jackpot",amount:0}]).map((pr,i)=>`
+      <div class="jprize-row jp-row">
+        <label>Match <input class="jp-match" type="number" min="1" max="${g.main_count||5}" value="${pr.match||1}" style="width:60px"></label>
+        <label><input type="checkbox" class="jp-mega" ${pr.mega?"checked":""}> + Mega</label>
+        <select class="jp-type"><option value="jackpot" ${pr.prize_type==="jackpot"?"selected":""}>Jackpot pool</option><option value="fixed" ${pr.prize_type==="fixed"?"selected":""}>Fixed ${cur}</option><option value="multiplier" ${pr.prize_type==="multiplier"?"selected":""}>× stake</option></select>
+        <input class="jp-amt" type="number" step="any" min="0" value="${pr.amount||0}" style="width:100%" placeholder="Amount" ${pr.prize_type==="jackpot"?"disabled":""}>
+        <button type="button" class="ghost" data-a="rmjprize">✕</button>
+      </div>`).join("");
+    return `<div class="glist-body gcard" data-id="${esc(g.id)}" style="--c:${g.color}">
+    <div class="row"><input class="f-name" value="${esc(g.name)}" style="flex:1;min-width:120px"><input type="color" class="f-color" value="${g.color}"><label><input type="checkbox" class="f-en" ${g.enabled!==false?"checked":""}> Show on sell</label></div>
+    <div class="row"><label>Format <select class="f-fmt">
+      <option value="digit" ${fmt==="digit"?"selected":""}>Digit number</option>
       <option value="zodiac" ${fmt==="zodiac"?"selected":""}>Zodiac + number</option>
       <option value="jackpot" ${fmt==="jackpot"?"selected":""}>Jackpot balls</option>
-    </select></label></div>
-    <div class="row fmt-row fmt-digit fmt-zodiac" style="${fmt==="jackpot"?"display:none":""}"><label>Number digits <select class="f-digits">${[1,2,3,4,5,6].map(n=>`<option value="${n}" ${(g.digits||4)==n?"selected":""}>${n} digits (${"0".repeat(n)}–${"9".repeat(n)})</option>`).join("")}</select></label>
-      ${fmt==="zodiac"?`<span class="note">Player enters a number plus one or more zodiac symbols</span>`:`<span class="note">Classic number game range</span>`}</div>
+    </select></label>
+    <label>Min bet <input class="f-mins" type="number" step="any" min="0" value="${g.min_stake??0.5}" style="width:80px"></label>
+    <label>Max bet <input class="f-maxs" type="number" step="any" min="0" value="${g.max_stake??100}" style="width:80px"></label></div>
+    <div class="row fmt-row fmt-digit fmt-zodiac" style="${fmt==="jackpot"?"display:none":""}"><label>Number digits <select class="f-digits">${[1,2,3,4,5,6].map(n=>`<option value="${n}" ${(g.digits||4)==n?"selected":""}>${n} (${"0".repeat(n)}–${"9".repeat(n)})</option>`).join("")}</select></label></div>
     <div class="row fmt-row fmt-jackpot" style="${fmt==="jackpot"?"":"display:none"}"><label>Balls to pick <input class="f-mc" type="number" min="1" max="10" value="${g.main_count||5}" style="width:70px"></label>
       <label>From 01– <input class="f-mm" type="number" min="5" max="99" value="${g.main_max||30}" style="width:70px"></label>
-      <label>Mega ball <select class="f-mega"><option value="0" ${!(g.mega_count)?"selected":""}>None</option><option value="1" ${g.mega_count==1?"selected":""}>Yes — 1 mega</option></select></label>
+      <label>Mega <select class="f-mega"><option value="0" ${!(g.mega_count)?"selected":""}>None</option><option value="1" ${g.mega_count==1?"selected":""}>Yes</option></select></label>
       <label>Mega max <input class="f-mx" type="number" min="1" max="99" value="${g.mega_max||15}" style="width:70px"></label></div>
-    <div class="row fmt-row fmt-jackpot" style="${fmt==="jackpot"?"":"display:none"}"><span class="note">Example: 5 balls from 01–30, optional mega from 01–15</span></div>
+    <div class="fmt-row fmt-jackpot" style="${fmt==="jackpot"?"":"display:none"}">
+      <h4 style="margin:12px 0 6px">Jackpot pool</h4>
+      <div class="row"><label>Minimum pool <input class="f-jmin" type="number" step="any" min="0" value="${g.jackpot_min??10000}" style="width:110px"></label>
+        <label>Current pool <input class="f-jcur" type="number" step="any" min="0" value="${g.jackpot_current??g.jackpot_min??10000}" style="width:110px"></label>
+        <label>Stay-in % <input class="f-jcon" type="number" step="any" min="0" max="100" value="${((g.jackpot_contrib??0.2)*100).toFixed(1)}" style="width:80px" title="% of each stake added to the pool"></label></div>
+      <h4 style="margin:12px 0 6px">Prize combinations (match count ≤ balls to pick)</h4>
+      <div class="jp-list">${prizeRows}</div>
+      <button type="button" class="ghost" data-a="addjprize" data-v="${esc(g.id)}">+ Add prize tier</button>
+      <p class="note">Example: Match 5 + Mega → Jackpot pool. Match 5 only → fixed amount. Match value cannot exceed balls to pick.</p>
+    </div>
     <div class="row"><label>Opens <input type="time" class="f-open" value="${g.open_time||"00:00"}"></label><label>Cut-off <input type="time" class="f-cut" value="${g.cutoff}"></label><label>Draw <input type="time" class="f-draw" value="${g.draw_time}"></label></div>
     <div class="row">${DAYS.map((n,i)=>`<label class="chip"><input type="checkbox" class="f-day" value="${i}" ${!g.draw_days?.length||g.draw_days.includes(i)?"checked":""}> ${n}</label>`).join("")}</div>
-    <div class="row fmt-row fmt-digit" style="${fmt==="digit"?"":"display:none"}"><span class="note" style="width:100%">Bet types for this digit game (none = all digit types):</span>${d.all_bet_types.filter(b=>b.mode!=="zodiac"&&b.mode!=="jackpot").map(b=>`<label class="chip"><input type="checkbox" class="f-bt" value="${b.key}" ${!g.bet_types.length||g.bet_types.includes(b.key)?"checked":""}> ${b.label}</label>`).join("")}</div>
-    <div class="row"><input type="file" class="f-file" data-id="${g.id}" accept="image/*" style="max-width:190px"><button class="ghost" data-a="glogoclear" data-v="${g.id}">Remove logo</button><span style="flex:1"></span><button data-a="savegame" data-v="${g.id}">Save</button><button class="ghost dng" data-a="delgame" data-v="${g.id}">Delete</button></div></div>`}).join("")}</div></div>`}
-  btCard(){const d=this.s.data;return `<div class="card" style="grid-column:1/-1"><h3>Bet types &amp; payouts</h3><table><tr><th>Type</th><th>Label</th><th>Payout ×</th><th>On</th><th></th></tr>${d.all_bet_types.map(b=>`<tr class="btr" data-k="${b.key}"><td>${b.digits} digits · ${b.mode}</td><td><input class="b-label" value="${esc(b.label)}" style="width:130px"></td><td><input class="b-mult" type="number" step="any" value="${b.multiplier}" style="width:90px"></td><td><input type="checkbox" class="b-en" ${b.enabled!==false?"checked":""}></td><td><button data-a="savebt" data-v="${b.key}">Save</button></td></tr>`).join("")}</table></div>`}
+    <div class="row fmt-row fmt-digit" style="${fmt==="digit"?"":"display:none"}"><span class="note" style="width:100%">Bet types (none = all digit types):</span>${d.all_bet_types.filter(b=>b.mode!=="zodiac"&&b.mode!=="jackpot").map(b=>`<label class="chip"><input type="checkbox" class="f-bt" value="${b.key}" ${!g.bet_types.length||g.bet_types.includes(b.key)?"checked":""}> ${b.label}</label>`).join("")}</div>
+    <div class="row"><input type="file" class="f-file" data-id="${g.id}" accept="image/*" style="max-width:190px"><button class="ghost" data-a="glogoclear" data-v="${g.id}">Remove logo</button><span style="flex:1"></span><button data-a="savegame" data-v="${g.id}">Save game</button><button class="ghost dng" data-a="delgame" data-v="${g.id}">Delete</button></div>
+  </div>`}
+  btCard(){const d=this.s.data;return `<div class="card" style="grid-column:1/-1"><h3>Bet types — payout &amp; stake limits</h3>
+    <p class="note">Payout × is the prize multiplier per 1.00 stake (digit / zodiac). Min–max stake limits each play amount.</p>
+    <table><tr><th>Type</th><th>Label</th><th>Payout ×</th><th>Min bet</th><th>Max bet</th><th>On</th><th></th></tr>
+    ${d.all_bet_types.map(b=>`<tr class="btr" data-k="${b.key}"><td>${b.digits?b.digits+" digits · ":""}${b.mode}</td>
+      <td><input class="b-label" value="${esc(b.label)}" style="width:120px"></td>
+      <td><input class="b-mult" type="number" step="any" value="${b.multiplier}" style="width:90px"></td>
+      <td><input class="b-min" type="number" step="any" min="0" value="${b.min_stake??0.5}" style="width:80px"></td>
+      <td><input class="b-max" type="number" step="any" min="0" value="${b.max_stake??100}" style="width:80px"></td>
+      <td><input type="checkbox" class="b-en" ${b.enabled!==false?"checked":""}></td>
+      <td><button data-a="savebt" data-v="${b.key}">Save</button></td></tr>`).join("")}</table></div>`}
   brandCard(){const s=this.s,st=s.data.settings,logo=s.logoDraft!==undefined?s.logoDraft:st.logo;return `<div class="card"><h3>Branding</h3><div class="row"><input id="bn" value="${esc(s.nameDraft??st.name)}" placeholder="Lottery name" style="flex:1" maxlength="40"></div>
       <div class="row">${logo?`<img class="prev" src="${logo}">`:`<span style="color:#94a3b8">No logo yet</span>`}<input type="file" id="logofile" accept="image/*"><button class="ghost" data-a="clearlogo">Remove logo</button></div>
       <button data-a="savebrand">Save branding</button></div>`}
@@ -534,12 +598,15 @@ class LotteryPosPanel extends HTMLElement{
     q("#num").classList.toggle("act",s.field==="num");q("#amt").classList.toggle("act",s.field==="amt");
     const col=k=>s.data.all_games.find(gg=>gg.id===k)?.color||"#64748b";
     const lineLabel=l=>{
-      if(l.symbols&&l.symbols.length)return l.number+" · "+l.symbols.join(",");
-      if(l.balls&&l.balls.length)return l.balls.join("-")+(l.mega?"+"+l.mega:"");
-      return l.number;
+      let base=l.number||"";
+      if(l.symbols&&l.symbols.length)base=l.number+" · "+l.symbols.join(",");
+      else if(l.balls&&l.balls.length)base=l.balls.join("-")+(l.mega?"+"+l.mega:"");
+      if((l.draws||1)>1)base+=` ×${l.draws} draws`;
+      return base;
     };
     q("#lines").innerHTML=s.lines.map((l,i)=>`<div class="ln ${s.editIdx===i?"editing":""}" data-a="edit" data-i="${i}"><i style="background:${col(l.game)}"></i><b>${esc(lineLabel(l))}</b><span>${this.btl(l.bet_type)}<small>${this.gn(l.game)} · ${l.date.slice(5)}</small></span><em>${fmt(l.amount)}</em><button class="ed" data-a="edit" data-i="${i}" title="Edit">✎</button><button data-a="del" data-i="${i}" title="Remove">✕</button></div>`).join("")||`<div class="empty">🎟️<br>No plays yet</div>`;
-    q("#cnt").textContent=s.lines.length;q("#tot").textContent=`${cur} ${fmt(s.lines.reduce((a,l)=>a+l.amount,0))}`}
+    const tot=s.lines.reduce((a,l)=>a+l.amount*(l.draws||1),0);
+    q("#cnt").textContent=s.lines.length;q("#tot").textContent=`${cur} ${fmt(tot)}`}
 
   onKey(e){const s=this.s;if(!s.data||s.tab!=="sell"||e.composedPath()[0]?.tagName==="INPUT"||e.composedPath()[0]?.tagName==="SELECT")return;
     if(/^\d$/.test(e.key))this.key(e.key);else if(e.key==="Backspace")this.key("DEL");else if(e.key==="Enter"){e.preventDefault();this.add()}else if(e.key==="Tab"){e.preventDefault();s.field=s.field==="num"?"amt":"num";this.paint()}}
@@ -552,7 +619,10 @@ class LotteryPosPanel extends HTMLElement{
   add(){const s=this.s,bt=this.bt(),amt=parseFloat(s.amt),g=this.primaryGame(),fmt=this.gameFormat(g),dig=this.gameDigits(g);
     if(!g)return this.toast("Select a game",1);
     if(!(amt>0))return this.toast("Enter an amount",1);
-    let line={game:s.sel[0],bet_type:bt?.key||(fmt==="jackpot"?"jackpot":fmt==="zodiac"?"zodiac":""),amount:amt,date:s.date,format:fmt};
+    const minS=+(g.min_stake??bt?.min_stake??0.5), maxS=+(g.max_stake??bt?.max_stake??100);
+    if(amt<minS||amt>maxS)return this.toast(`Amount must be ${minS}–${maxS}`,1);
+    const draws=Math.max(1,Math.min(28,+(s.draws||1)));
+    let line={game:s.sel[0],bet_type:bt?.key||(fmt==="jackpot"?"jackpot":fmt==="zodiac"?"zodiac":""),amount:amt,date:s.date,format:fmt,draws};
     if(fmt==="digit"){
       if(!bt)return this.toast("No bet type available",1);
       const need=dig||bt.digits;
@@ -570,8 +640,7 @@ class LotteryPosPanel extends HTMLElement{
       line.bet_type="jackpot";line.balls=[...s.balls].sort();line.mega=s.mega||"";line.number=line.balls.join("-")+(line.mega?"+"+line.mega:"");
     }
     if(s.editIdx!=null){s.lines[s.editIdx]=line;s.editIdx=null;s.fresh=null;s.num="";s.balls=[];s.mega="";s.symbols=[];s.allZodiac=false;s.field="num";this.toast("Play updated");return this.render()}
-    if(fmt==="digit"){for(const gid of s.sel)s.lines.push({...line,game:gid})}
-    else s.lines.push(line);
+    s.lines.push(line);
     s.num="";s.balls=[];s.mega="";s.field="num";this.paint()}
 
   async act(a,ds){const s=this.s;
@@ -586,6 +655,17 @@ class LotteryPosPanel extends HTMLElement{
         else this.toast(`Only ${mc} balls`,1);
         this.paint();break}
       case "mega":s.mega=s.mega===ds.v?"":ds.v;this.paint();break;
+      case "editgame":s.editGame=s.editGame===ds.v?null:ds.v;this.render();break;
+      case "draws":s.draws=+ds.v||1;this.render();break;
+      case "addjprize":{const c=this.shadowRoot.querySelector(`.gcard[data-id="${ds.v}"]`);if(!c)break;
+        const box=c.querySelector(".jp-list");if(!box)break;
+        const row=document.createElement("div");row.className="jprize-row jp-row";
+        row.innerHTML=`<label>Match <input class="jp-match" type="number" min="1" value="3" style="width:60px"></label>
+          <label><input type="checkbox" class="jp-mega"> + Mega</label>
+          <select class="jp-type"><option value="fixed">Fixed</option><option value="multiplier">× stake</option><option value="jackpot">Jackpot pool</option></select>
+          <input class="jp-amt" type="number" step="any" min="0" value="100" style="width:100%">
+          <button type="button" class="ghost" data-a="rmjprize">✕</button>`;
+        box.appendChild(row);break}
       case "tab":s.tab=ds.v;this.render();break;
       case "game":{
         // Single-select: tap a game to sell that game only
@@ -626,18 +706,30 @@ class LotteryPosPanel extends HTMLElement{
       case "savegame":{const c=this.shadowRoot.querySelector(`.gcard[data-id="${ds.v}"]`);if(!c)break;const v=x=>c.querySelector(x),all=[...c.querySelectorAll(".f-bt")],pick=all.filter(i=>i.checked).map(i=>i.value);
         const days=[...c.querySelectorAll(".f-day")].filter(i=>i.checked).map(i=>+i.value);if(!days.length)return this.toast("Pick at least one draw day",1);
         const fmtSel=v(".f-fmt")?.value||"digit";
+        const jprizes=[...c.querySelectorAll(".jp-row")].map(row=>({
+          match:+row.querySelector(".jp-match")?.value||1,
+          mega:!!row.querySelector(".jp-mega")?.checked,
+          prize_type:row.querySelector(".jp-type")?.value||"fixed",
+          amount:+row.querySelector(".jp-amt")?.value||0
+        }));
         const msg={game_id:String(ds.v),name:v(".f-name").value,color:v(".f-color").value,enabled:v(".f-en").checked,open_time:v(".f-open").value,cutoff:v(".f-cut").value,draw_time:v(".f-draw").value,bet_types:pick.length===all.length||!pick.length?[]:pick,draw_days:days.length===7?[]:days,
           format:fmtSel,
           digits:+(v(".f-digits")?.value||4),
           main_count:+(v(".f-mc")?.value||5),
           main_max:+(v(".f-mm")?.value||30),
           mega_count:+(v(".f-mega")?.value||0),
-          mega_max:+(v(".f-mx")?.value||15)};
+          mega_max:+(v(".f-mx")?.value||15),
+          min_stake:+(v(".f-mins")?.value||0.5),
+          max_stake:+(v(".f-maxs")?.value||100),
+          jackpot_min:+(v(".f-jmin")?.value||0),
+          jackpot_current:+(v(".f-jcur")?.value||0),
+          jackpot_contrib:(+(v(".f-jcon")?.value||0))/100,
+          jackpot_prizes:jprizes};
         if(s.glogos[ds.v]!==undefined)msg.logo=s.glogos[ds.v];
         if(await this.call("update_game",msg)){delete s.glogos[ds.v];s.data=await this.ws("state");this.toast("Game saved");this.render()}break}
       case "glogoclear":s.glogos[ds.v]="";this.toast("Logo is removed when you press Save");break;
       case "delgame":{if(!await this.modal({title:"Delete game?",text:"Only possible if it has no sales. Otherwise hide it instead.",ok:"Delete"}))break;if(await this.call("delete_game",{game_id:String(ds.v)})){s.data=await this.ws("state");this.toast("Game deleted");this.render()}break}
-      case "savebt":{const r=this.shadowRoot.querySelector(`.btr[data-k="${ds.v}"]`);if(await this.call("update_bet_type",{key:ds.v,label:r.querySelector(".b-label").value,multiplier:+r.querySelector(".b-mult").value,enabled:r.querySelector(".b-en").checked})){s.data=await this.ws("state");this.toast("Bet type saved");this.render()}break}
+      case "savebt":{const r=this.shadowRoot.querySelector(`.btr[data-k="${ds.v}"]`);if(!r)break;if(await this.call("update_bet_type",{key:ds.v,label:r.querySelector(".b-label").value,multiplier:+r.querySelector(".b-mult").value,min_stake:+r.querySelector(".b-min").value,max_stake:+r.querySelector(".b-max").value,enabled:r.querySelector(".b-en").checked})){s.data=await this.ws("state");this.toast("Bet type saved");this.render()}break}
       case "saveticker":{const q=x=>this.shadowRoot.querySelector(x);if(await this.call("set_ticker",{text:q("#tt").value,enabled:q("#te").checked,speed:+q("#ts").value,color:q("#tc").value})){s.data=await this.ws("state");this.toast("Message saved");this.render()}break}
       case "clearlogo":s.nameDraft=this.shadowRoot.querySelector("#bn")?.value;s.logoDraft="";this.render();break;
       case "savebrand":{const q=x=>this.shadowRoot.querySelector(x).value;const logo=s.logoDraft!==undefined?s.logoDraft:s.data.settings.logo;if(await this.call("set_branding",{name:q("#bn"),logo})){s.data=await this.ws("state");s.logoDraft=undefined;s.nameDraft=undefined;this.toast("Branding saved");this.render()}break}
