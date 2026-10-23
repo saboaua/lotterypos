@@ -71,8 +71,11 @@ def _draws(s, m): return s.draw_results(m["date"])
 @_cmd("report", {vol.Required("date_from"): str, vol.Required("date_to"): str})
 def _report(s, m): return s.report(m["date_from"], m["date_to"])
 
-@_cmd("scrape_joeblack", {vol.Optional("url", default="https://www.joeblack.online/"): str}, admin=True)
-def _scrape(s, m): return s.scrape_joeblack(m.get("url") or "https://www.joeblack.online/")
+@_cmd("scrape_indios", {vol.Optional("url", default="https://indioslottery.com/"): str}, admin=True)
+def _scrape_indios(s, m): return s.scrape_indios(m.get("url") or "https://indioslottery.com/")
+
+@_cmd("scrape_joeblack", {vol.Optional("url", default="https://indioslottery.com/"): str}, admin=True)
+def _scrape(s, m): return s.scrape_indios(m.get("url") or "https://indioslottery.com/")
 
 @_cmd("set_results", {vol.Required("game"): str, vol.Required("date"): str, vol.Required("numbers"): [str]}, admin=True)
 def _results(s, m): return {"winners": s.set_results(m["game"], m["date"], m["numbers"])}
@@ -228,6 +231,7 @@ def _psum(s, m):
 
 COMMANDS = [
     _state, _sell, _ticket, _last, _cancel, _redeem, _draws, _report, _results,
+    _scrape_indios, _scrape,
     _add_r, _add_g, _brand, _ticker, _upd_g, _del_g, _upd_b, _design, _upd_r, _rsum,
     _add_p, _upd_p, _del_p, _chk, _draw_p, _psum,
 ]

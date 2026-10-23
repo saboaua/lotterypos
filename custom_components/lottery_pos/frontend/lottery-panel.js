@@ -362,9 +362,9 @@ class LotteryPosPanel extends HTMLElement{
     const badge=x=>`<span class="st ${(lab[x]||["pending",x])[0]}">${(lab[x]||["",x])[1]}</span>`;
     const form=`<div class="card"><h3>Enter draw results</h3><div class="row"><select id="rg">${d.all_games.map(g=>`<option value="${g.id}">${esc(g.name)}</option>`).join("")}</select><input type="date" id="rd" value="${today()}"></div>
       <div class="row"><input id="r1" maxlength="4" placeholder="1st" size="5" inputmode="numeric"><input id="r2" maxlength="4" placeholder="2nd" size="5" inputmode="numeric"><input id="r3" maxlength="4" placeholder="3rd" size="5" inputmode="numeric"></div><button data-a="saveres">Save &amp; settle</button></div>
-      <div class="card"><h3>Import from joeblack.online</h3>
+      <div class="card"><h3>Import from indioslottery.com</h3>
         <p class="note">Scrapes the latest published winning numbers and settles matching local games (name match). Use to validate tickets against official results.</p>
-        <div class="row"><button data-a="scrapejb">Fetch results from joeblack.online</button></div>
+        <div class="row"><button data-a="scrapejb">Fetch results from indioslottery.com</button></div>
         ${s.scrapeResult?`<div class="note" style="margin-top:10px"><b>Date ${esc(s.scrapeResult.date||"")}</b><br>
           Imported: ${(s.scrapeResult.imported||[]).map(x=>`${esc(x.game)} [${(x.numbers||[]).join(", ")}] → ${x.winners} winner(s)`).join("<br>")||"none"}
           ${(s.scrapeResult.skipped||[]).length?`<br>Skipped: ${s.scrapeResult.skipped.map(x=>esc(x.name)+` (${esc(x.reason)})`).join(", ")}`:""}
@@ -839,7 +839,7 @@ class LotteryPosPanel extends HTMLElement{
         this.paint();break}
       case "mega":s.mega=s.mega===ds.v?"":ds.v;this.paint();break;
       case "editgame":s.editGame=s.editGame===ds.v?null:ds.v;this.render();break;
-      case "scrapejb":{this.toast("Fetching joeblack.online…");const r=await this.call("scrape_joeblack",{});
+      case "scrapejb":{this.toast("Fetching indioslottery.com…");const r=await this.call("scrape_indios",{});
         if(r){s.scrapeResult=r;s.data=await this.ws("state");
           const n=(r.imported||[]).length,w=(r.imported||[]).reduce((a,x)=>a+(x.winners||0),0);
           this.toast(`Imported ${n} game(s), ${w} winning ticket(s)`);this.render()}break}

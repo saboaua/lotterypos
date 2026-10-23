@@ -1047,87 +1047,229 @@ class LotteryStore:
         self._save()
         return self.data["settings"]["ticker"]
 
-    # ---------- external results scrape ----------
-    def scrape_joeblack(self, url: str = "https://www.joeblack.online/") -> dict:
-        """Fetch published results from joeblack.online and store matching local games.
 
-        Maps site names to local game names (case-insensitive, partial match).
-        Returns summary of imported draws for validation against sold tickets.
-        """
-        try:
-            req = urllib.request.Request(url, headers={"User-Agent": "LotteryPOS/1.0"})
-            with urllib.request.urlopen(req, timeout=20) as resp:
-                html = resp.read().decode("utf-8", errors="ignore")
-        except Exception as err:
-            raise LotteryError(f"Could not fetch results: {err}") from err
+    # ---------- external results scrape (indioslottery.com) ----------
+    INDIOS_SUPABASE = "https://sswbmocnjkuwoyqqpgsk.supabase.co"
+    INDIOS_ANON_KEY = (
+        "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9."
+        "eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNzd2Jtb2Nuamt1d295cXFwZ3NrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTU2NTQ5NjMsImV4cCI6MjA3MTIzMDk2M30."
+        "PSZMQgLihW_ZnEaW9ynCINWvvFl9skaOwWW92TWHzL8"
+    )
+    # site game_code → possible local game name/id fragments
+    INDIOS_ALIASES = {
+        "DIARIO": ["diario"],
+        "CORSOW": ["corsow", "korsow", "korsou", "wnk"],
+        "KORSOW": ["corsow", "korsow", "korsou", "wnk"],
+        "FLAMINGO": ["flamingo"],
+        "SUPER4": ["super4", "super 4", "super-4"],
+        "PHILIPSBURG_AM": ["philipsburg am", "philb_am", "philb am", "phlp am"],
+        "PHILIPSBURG_PM": ["philipsburg pm", "philb_pm", "philb pm", "phlp pm", "philipsburg evening"],
+        "BIG4": ["big 4", "big4"],
+        "CATOCHI": ["catochi"],
+        "LUCKY3": ["lucky 3", "lucky3"],
+        "ONEOFF": ["1 off", "1-off", "oneoff", "one off"],
+        "ZODIAC": ["zodiac"],
+        "LOTTO_DIA": ["lotto di dia", "lottodidia", "lotto dia"],
+        "LOTTO5": ["lotto 5", "lotto5"],
+        "MINI_MEGA": ["mini mega", "minimega"],
+        "MINIMEGA": ["mini mega", "minimega"],
+        "MEGAPLUS": ["mega plus", "megaplus"],
+        "MEGA_PLUS": ["mega plus", "megaplus"],
+    }
 
-        # Date like "Thu - Oct 22, 2026"
-        date_match = re.search(
-            r"(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)\s*-\s*([A-Za-z]{3})\s+(\d{1,2}),\s*(\d{4})",
-            html,
+    def _indios_fetch(self, path: str) -> list:
+        url = f"{self.INDIOS_SUPABASE}/rest/v1/{path}"
+        req = urllib.request.Request(
+            url,
+            headers={
+                "User-Agent": "LotteryPOS/1.0",
+                "apikey": self.INDIOS_ANON_KEY,
+                "Authorization": f"Bearer {self.INDIOS_ANON_KEY}",
+                "Accept": "application/json",
+            },
         )
-        draw_date = None
-        if date_match:
-            mon, day, year = date_match.group(1), date_match.group(2), date_match.group(3)
-            months = {m: i for i, m in enumerate(
-                ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"], 1)}
-            if mon in months:
-                draw_date = f"{year}-{months[mon]:02d}-{int(day):02d}"
-        if not draw_date:
-            draw_date = dt_util.now().date().isoformat()
+        with urllib.request.urlopen(req, timeout=25) as resp:
+            data = json.loads(resp.read().decode("utf-8", errors="ignore"))
+        return data if isinstance(data, list) else []
 
-        blocks = re.findall(
-            r'winner-name[^>]*>([^<]+)</span>.*?number-list[^>]*>(.*?)</ul>',
-            html,
-            re.S | re.I,
-        )
-        games_by_name = {g["name"].lower(): g for g in self.data["games"]}
-        # aliases for common site names
-        aliases = {
-            "w.n.k.": "wnk", "wnk": "wnk", "diario": "diario", "flamingo": "flamingo",
-            "super-4": "super4", "super 4": "super4", "super4": "super4",
-            "philipsburg evening": "philb_pm", "philipsburg midday": "philb_am",
-            "philipsburg evening": "philbpm", "corsow": "corsow",
-        }
+    def _match_local_game(self, code: str, period: str | None = None):
+        """Match Indios game_code (+ optional midday/evening) to a local game."""
+        code_u = (code or "").upper().strip()
+        aliases = list(self.INDIOS_ALIASES.get(code_u, []))
+        aliases.append(code_u.lower().replace("_", " "))
+        aliases.append(code_u.lower().replace("_", ""))
+        if period:
+            p = period.lower()
+            extra = []
+            for a in aliases:
+                if p in ("midday", "merdia"):
+                    extra += [f"{a} merdia", f"{a} midday", f"{a} am"]
+                elif p in ("evening", "anochi"):
+                    extra += [f"{a} anochi", f"{a} evening", f"{a} pm"]
+            aliases = extra + aliases
+        # exact id / name
+        for g in self.data["games"]:
+            gname = g["name"].lower().strip()
+            gid = g["id"].lower().strip()
+            for a in aliases:
+                a = a.lower()
+                if gid == a or gname == a or a in gname or gname in a:
+                    return g
+        return None
+
+    def _nums_from_indios_row(self, row: dict, period_style: bool) -> tuple[str, list[str]]:
+        """Return (draw_date, numbers list) from a Supabase row."""
+        draw_date = str(row.get("draw_date") or dt_util.now().date().isoformat())[:10]
+        if not period_style:
+            # v_our_latest: first/second/third/skina
+            nums = []
+            for k in ("first_prize", "second_prize", "third_prize", "skina4_prize"):
+                v = row.get(k)
+                if v is None or v == "":
+                    continue
+                s = str(v).strip()
+                if s.isdigit():
+                    nums.append(s.zfill(4) if len(s) <= 4 else s)
+            return draw_date, nums
+        # v_lotto_latest
+        raw = row.get("numbers")
+        if isinstance(raw, str):
+            try:
+                raw = json.loads(raw)
+            except Exception:
+                raw = []
+        if not isinstance(raw, list):
+            raw = []
+        extra = row.get("extra") or {}
+        if isinstance(extra, str):
+            try:
+                extra = json.loads(extra)
+            except Exception:
+                extra = {}
+        code = str(row.get("game_code") or "").upper()
+        nums: list[str] = []
+        if code in ("LOTTO_DIA", "LOTTO5", "MINI_MEGA", "MINIMEGA"):
+            for x in raw:
+                s = str(x).strip()
+                if s.isdigit():
+                    nums.append(s.zfill(2))
+            joker = extra.get("joker") or extra.get("mega") or extra.get("mega_ball")
+            if joker is not None and str(joker).strip() != "":
+                nums.append(str(joker).strip().zfill(2))
+        elif code == "ZODIAC":
+            # digits + sign
+            digits = "".join(str(x) for x in raw)
+            nums.append(digits)
+            sign = str(extra.get("sign") or "").lower().strip()
+            # map spanish/english signs to our zodiac ids when possible
+            sign_map = {
+                "aries": "aries", "tauro": "taurus", "taurus": "taurus",
+                "geminis": "gemini", "gemini": "gemini", "cancer": "cancer",
+                "leo": "leo", "virgo": "virgo", "libra": "libra",
+                "escorpio": "scorpio", "scorpio": "scorpio",
+                "sagitario": "sagittarius", "sagittarius": "sagittarius",
+                "capricornio": "capricorn", "capricorn": "capricorn",
+                "acuario": "aquarius", "aquarius": "aquarius",
+                "piscis": "pisces", "pisces": "pisces",
+                "rat": "rat", "ox": "ox", "tiger": "tiger", "rabbit": "rabbit",
+                "dragon": "dragon", "snake": "snake", "horse": "horse",
+                "goat": "goat", "monkey": "monkey", "rooster": "rooster",
+                "dog": "dog", "pig": "pig",
+            }
+            if sign:
+                nums.append(sign_map.get(sign, sign))
+        else:
+            # digit games: join into one number string(s)
+            if all(str(x).isdigit() and len(str(x)) == 1 for x in raw):
+                nums.append("".join(str(x) for x in raw))
+            else:
+                for x in raw:
+                    s = str(x).strip()
+                    if s:
+                        nums.append(s)
+        return draw_date, nums
+
+    def scrape_indios(self, url: str = "https://indioslottery.com/") -> dict:
+        """Pull latest results from indioslottery.com (Supabase public API) and settle matching games."""
         imported, skipped, winners_all = [], [], []
-        for raw_name, body in blocks:
-            name = re.sub(r"\s+", " ", raw_name.strip())
-            nums = re.findall(r"<li>(\d+)</li>", body, re.I)
-            if not nums:
-                skipped.append({"name": name, "reason": "no numbers"})
+        try:
+            our = self._indios_fetch("v_our_latest?select=*")
+            midday = self._indios_fetch("v_lotto_latest?select=*&period=eq.midday")
+            evening = self._indios_fetch("v_lotto_latest?select=*&period=eq.evening")
+        except Exception as err:
+            raise LotteryError(f"Could not fetch Indios results: {err}") from err
+
+        rows = []
+        for r in our:
+            rows.append((r, False, None))
+        for r in midday:
+            rows.append((r, True, "midday"))
+        for r in evening:
+            rows.append((r, True, "evening"))
+
+        dates = set()
+        for row, period_style, period in rows:
+            code = str(row.get("game_code") or "").strip()
+            if not code:
+                skipped.append({"name": "?", "reason": "missing game_code"})
                 continue
-            key = name.lower()
-            game = games_by_name.get(key)
+            label = code + (f" ({period})" if period else "")
+            draw_date, nums = self._nums_from_indios_row(row, period_style)
+            if not nums:
+                skipped.append({"name": label, "reason": "no numbers"})
+                continue
+            game = self._match_local_game(code, period)
             if not game:
-                # partial / alias
-                aid = aliases.get(key)
-                if aid:
-                    game = next((g for g in self.data["games"] if g["id"] == aid or g["name"].lower() == aid), None)
-                if not game:
-                    for g in self.data["games"]:
-                        if key in g["name"].lower() or g["name"].lower() in key:
-                            game = g
-                            break
-            if not game:
-                skipped.append({"name": name, "reason": "no matching local game"})
+                skipped.append({"name": label, "reason": "no matching local game"})
                 continue
             try:
                 winners = self.set_results(game["id"], draw_date, nums)
             except LotteryError as err:
-                skipped.append({"name": name, "reason": str(err)})
+                skipped.append({"name": label, "reason": str(err)})
                 continue
+            dates.add(draw_date)
             imported.append({
                 "game": game["name"], "game_id": game["id"], "date": draw_date,
-                "numbers": nums, "winners": len(winners),
+                "numbers": nums, "winners": len(winners), "source_code": code,
             })
             winners_all.extend(winners)
+
+        # also try to update jackpot pools from extra.jackpot when present
+        for row, period_style, period in rows:
+            if not period_style:
+                continue
+            extra = row.get("extra") or {}
+            if isinstance(extra, str):
+                try:
+                    extra = json.loads(extra)
+                except Exception:
+                    extra = {}
+            jp = extra.get("jackpot")
+            if not jp:
+                continue
+            game = self._match_local_game(str(row.get("game_code") or ""), period)
+            if not game or game.get("format") != "jackpot":
+                continue
+            try:
+                # European-style thousand separator: 450.000 → 450000
+                val = float(str(jp).replace(".", "").replace(",", ""))
+                game["jackpot_current"] = val
+            except (TypeError, ValueError):
+                pass
+        if any(r[1] for r in rows):
+            self._save()
+
         return {
-            "source": url,
-            "date": draw_date,
+            "source": url or "https://indioslottery.com/",
+            "date": sorted(dates)[-1] if dates else dt_util.now().date().isoformat(),
             "imported": imported,
             "skipped": skipped,
             "winners": [self.public(w) if isinstance(w, dict) and "id" in w else w for w in winners_all],
         }
+
+    # backward-compatible alias
+    def scrape_joeblack(self, url: str = "https://indioslottery.com/") -> dict:
+        return self.scrape_indios(url)
 
 
     def update_game(self, gid: str, f: dict) -> dict:
