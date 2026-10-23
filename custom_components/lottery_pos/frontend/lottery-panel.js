@@ -143,6 +143,18 @@ table{width:100%;border-collapse:collapse;font-size:13px}td,th{padding:9px 6px;b
 .promo-card{border:1px solid var(--line);border-radius:20px;padding:16px;margin-bottom:14px;background:var(--card);box-shadow:var(--sh)}
 .promo-card h4{margin:0 0 8px;display:flex;align-items:center;gap:8px;font-size:16px}
 .promo-card .meta{font-size:12px;color:var(--mut);margin-bottom:10px;line-height:1.4}
+.zodiac-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(72px,1fr));gap:8px;margin:8px 0 4px}
+.zchip{display:flex;flex-direction:column;align-items:center;gap:2px;padding:10px 6px;border-radius:14px;border:2px solid var(--line);background:var(--key);font-size:11px;font-weight:600;color:var(--mut);cursor:pointer}
+.zchip.on{border-color:var(--pri);background:color-mix(in srgb,var(--pri) 14%,var(--card));color:var(--ink);box-shadow:0 0 0 3px color-mix(in srgb,var(--pri) 20%,transparent)}
+.zchip .em{font-size:22px;line-height:1}
+.ball-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(40px,1fr));gap:6px;margin:8px 0}
+.bchip{height:40px;border-radius:12px;border:2px solid var(--line);background:var(--key);font-weight:700;font-size:14px;color:var(--mut)}
+.bchip.on{border-color:var(--pri);background:linear-gradient(135deg,var(--pri),var(--pri2));color:#fff}
+.bchip.mega{border-color:#f59e0b}.bchip.mega.on{background:linear-gradient(135deg,#f59e0b,#ef4444);border-color:#f59e0b}
+.fmt-tag{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;opacity:.85}
+.fmt-panel{margin:8px 0;padding:10px 12px;border-radius:14px;background:var(--key);border:1px solid var(--line)}
+.fmt-panel h5{margin:0 0 6px;font-size:12px;color:var(--mut);text-transform:uppercase;letter-spacing:.05em}
+
 .ret-card{border:1px solid var(--line);border-radius:20px;padding:16px;margin-bottom:14px;background:var(--card);box-shadow:var(--sh)}
 .ret-card h4{margin:0 0 4px;font-size:16px;display:flex;align-items:center;gap:8px}
 .ret-card .rnum{font-size:12px;font-weight:700;color:var(--pri);background:color-mix(in srgb,var(--pri) 12%,transparent);padding:2px 10px;border-radius:999px}
@@ -162,7 +174,7 @@ button{cursor:pointer;border:none;font-family:inherit}
 
 class LotteryPosPanel extends HTMLElement{
   constructor(){super();this.attachShadow({mode:"open"});
-    this.s={tab:"sell",sel:[],bt:"",date:today(),num:"",amt:"",field:"num",lines:[],retailer:"",data:null,scan:"",report:null,glogos:{},sub:"games"};
+    this.s={tab:"sell",sel:[],bt:"",date:today(),num:"",amt:"",field:"num",lines:[],retailer:"",data:null,scan:"",report:null,glogos:{},sub:"games",symbols:[],balls:[],mega:"",allZodiac:false};
     this._kh=e=>this.onKey(e)}
   connectedCallback(){window.addEventListener("keydown",this._kh)}
   disconnectedCallback(){window.removeEventListener("keydown",this._kh);clearInterval(this._tm)}
@@ -174,7 +186,16 @@ class LotteryPosPanel extends HTMLElement{
     this.shadowRoot.addEventListener("click",e=>{const el=e.target.closest("[data-a]");if(!el)return;if(el.dataset.a==="rmprizerow"||el.dataset.a==="rmnprizerow"){const row=el.closest(".p-prize-row,.n-prize-row");if(row){const box=row.parentElement;if(box&&box.querySelectorAll(".p-prize-row,.n-prize-row").length>1)row.remove();else this.toast("Keep at least one prize row",1)}return}this.act(el.dataset.a,el.dataset)});
     this.render()}
   bt(){return this.s.data.all_bet_types.find(b=>b.key===this.s.bt)}
-  allowedBTs(){const s=this.s,d=s.data,sel=s.sel.map(id=>d.all_games.find(g=>g.id===id)).filter(Boolean);return d.bet_types.filter(b=>sel.every(g=>!g.bet_types?.length||g.bet_types.includes(b.key)))}
+  primaryGame(){const s=this.s;return s.data.all_games.find(g=>g.id===s.sel[0])||s.data.games[0]}
+  gameFormat(g){return (g&&g.format)||"digit"}
+  gameDigits(g){const f=this.gameFormat(g);if(f==="jackpot")return 0;return +(g?.digits||this.bt()?.digits||4)}
+  zodiacList(){const all=this.s.data.zodiac_symbols||[];const g=this.primaryGame();const ids=g?.symbols?.length?g.symbols:all.map(z=>z.id);return all.filter(z=>ids.includes(z.id))}
+  allowedBTs(){const s=this.s,d=s.data,sel=s.sel.map(id=>d.all_games.find(g=>g.id===id)).filter(Boolean);
+    if(!sel.length)return d.bet_types;
+    const fmts=new Set(sel.map(g=>this.gameFormat(g)));
+    if(fmts.has("jackpot"))return d.bet_types.filter(b=>b.key==="jackpot"||b.mode==="jackpot");
+    if(fmts.has("zodiac"))return d.bet_types.filter(b=>b.key==="zodiac"||b.mode==="zodiac");
+    return d.bet_types.filter(b=>b.mode!=="zodiac"&&b.mode!=="jackpot"&&sel.every(g=>!g.bet_types?.length||g.bet_types.includes(b.key)))}
   btl(k){return this.s.data.all_bet_types.find(b=>b.key===k)?.label||k}
   gn(k){return this.s.data.all_games.find(g=>g.id===k)?.name||k}
   toast(m,err){const t=document.createElement("div");t.className="toast"+(err?" err":"");t.textContent=(err?"⚠ ":"✓ ")+m;this.shadowRoot.append(t);setTimeout(()=>t.remove(),3200)}
@@ -212,15 +233,41 @@ class LotteryPosPanel extends HTMLElement{
 
   tickerHTML(){const t=this.s.data.settings.ticker;if(!t||!t.enabled||!t.text)return"";const w=t.text.length*18+1000,dur=Math.max(8,w/(30+t.speed*30));return `<div class="ticker"><div class="tk" style="color:${t.color};animation-duration:${dur.toFixed(1)}s">${esc(t.text)}</div></div>`}
 
+
+  formatPanelHTML(){const s=this.s,g=this.primaryGame();if(!g)return"";
+    const fmt=this.gameFormat(g);
+    if(fmt==="zodiac"){
+      const zs=this.zodiacList();
+      const allOn=s.allZodiac||(s.symbols.length&&s.symbols.length===zs.length);
+      return `<div class="fmt-panel"><h5>Zodiac symbols · ${g.digits||2}-digit number</h5>
+        <div class="row"><button class="ghost ${allOn?"on":""}" data-a="zodall">All symbols</button><button class="ghost" data-a="zodclear">Clear</button><span class="note">${s.symbols.length||0} selected</span></div>
+        <div class="zodiac-grid">${zs.map(z=>`<button type="button" class="zchip ${(s.symbols||[]).includes(z.id)?"on":""}" data-a="zod" data-v="${z.id}"><span class="em">${z.emoji||""}</span>${esc(z.label)}</button>`).join("")}</div></div>`;
+    }
+    if(fmt==="jackpot"){
+      const mc=+g.main_count||5, mm=+g.main_max||30, mega=+g.mega_count||0, mx=+g.mega_max||15;
+      const balls=s.balls||[];
+      return `<div class="fmt-panel"><h5>Jackpot · pick ${mc} from 01–${String(mm).padStart(2,"0")}${mega?` + mega 01–${String(mx).padStart(2,"0")}`:""}</h5>
+        <div class="ball-grid">${Array.from({length:mm},(_,i)=>{const v=String(i+1).padStart(2,"0");return `<button type="button" class="bchip ${balls.includes(v)?"on":""}" data-a="ball" data-v="${v}">${v}</button>`}).join("")}</div>
+        ${mega?`<h5>Mega ball</h5><div class="ball-grid">${Array.from({length:mx},(_,i)=>{const v=String(i+1).padStart(2,"0");return `<button type="button" class="bchip mega ${s.mega===v?"on":""}" data-a="mega" data-v="${v}">${v}</button>`}).join("")}</div>`:""}
+        <span class="note">${balls.length}/${mc} main${mega?` · mega ${s.mega||"—"}`:""}</span></div>`;
+    }
+    const dig=this.gameDigits(g);
+    return `<div class="fmt-panel"><h5>Number game · ${dig} digits (${"0".repeat(dig)}–${"9".repeat(dig)})</h5></div>`;
+  }
+
   sellHTML(){const s=this.s,d=s.data;
     s.sel=s.sel.filter(id=>{const g=d.games.find(x=>x.id===id);return g&&this.cd(g).open});
     if(!s.sel.length){const g=d.games.find(x=>this.cd(x).open);if(g)s.sel=[g.id]}
-    this._sig=d.games.map(g=>this.cd(g).open?1:0).join("");const ok=this.allowedBTs();if(ok.length&&!ok.find(b=>b.key===s.bt)){s.bt=ok[0].key;s.num=s.num.slice(0,ok[0].digits)}
-    const games=d.games.map(g=>{const c=this.cd(g);return `<button class="game ${s.sel.includes(g.id)?"on":""} ${c.open?"":"closed"}" style="--c:${g.color}" data-a="game" data-v="${g.id}"><span class="gi">${g.logo?`<img src="${g.logo}">`:esc(g.name[0])}</span><b>${esc(g.name)}</b><small>Draw ${g.draw_time}${g.draw_days?.length&&g.draw_days.length<7?" · "+g.draw_days.map(i=>DAYS[i]).join(" "):""}</small><small data-cd="${g.id}">${c.txt}</small><span class="chk">✓</span></button>`}).join("");
+    this._sig=d.games.map(g=>this.cd(g).open?1:0).join("");
+    // keep selection on same format
+    if(s.sel.length>1){const f0=this.gameFormat(d.all_games.find(g=>g.id===s.sel[0]));s.sel=s.sel.filter(id=>this.gameFormat(d.all_games.find(g=>g.id===id))===f0)}
+    const ok=this.allowedBTs();if(ok.length&&!ok.find(b=>b.key===s.bt)){s.bt=ok[0].key;s.num=s.num.slice(0,ok[0].digits||this.gameDigits(this.primaryGame()))}
+    const games=d.games.map(g=>{const c=this.cd(g);const fmt=this.gameFormat(g);const tag=fmt==="digit"?`${g.digits||4}d`:fmt;return `<button class="game ${s.sel.includes(g.id)?"on":""} ${c.open?"":"closed"}" style="--c:${g.color}" data-a="game" data-v="${g.id}"><span class="gi">${g.logo?`<img src="${g.logo}">`:esc(g.name[0])}</span><b>${esc(g.name)}</b><small class="fmt-tag">${tag}</small><small>Draw ${g.draw_time}${g.draw_days?.length&&g.draw_days.length<7?" · "+g.draw_days.map(i=>DAYS[i]).join(" "):""}</small><small data-cd="${g.id}">${c.txt}</small><span class="chk">✓</span></button>`}).join("");
     const acts=[["quick","mdi:dice-multiple","Quick pick"],["last","mdi:receipt-text-outline","Último"],["copy","mdi:content-copy","Copia"],["clear","mdi:delete-sweep-outline","Clear"],["cancel","mdi:cancel","Cancel"],["redeem","mdi:cash-check","Redeem"],["results","mdi:printer","Resultado"],["report1","mdi:file-chart-outline","Report"]];
     return `<div class="main"><section class="left card">
     <div class="games">${games}</div>
     <div class="ctl"><input type="date" id="date" value="${s.date}" min="${today()}"><div class="bts">${ok.map(b=>`<button class="bt ${b.key===s.bt?"on":""}" data-a="bt" data-v="${b.key}">${b.label}</button>`).join("")}</div></div>
+    ${this.formatPanelHTML()}
     <div class="entry"><div id="num" class="disp" data-a="field" data-v="num"></div><div id="amt" class="disp" data-a="field" data-v="amt"></div>${s.editIdx!=null?`<div class="editbar">✎ Editing play ${s.editIdx+1} — type the new number / amount, then press Update</div><button class="add upd" data-a="add">✔ Update play</button><button class="cancel" data-a="canceledit" style="grid-column:1/-1">Cancel edit</button>`:`<button class="add" data-a="add">＋ Add to ticket</button>`}</div>
     <div class="pads"><div class="pad">${[1,2,3,4,5,6,7,8,9,"CLR",0,"DEL"].map(k=>`<button data-a="key" data-v="${k}">${k}</button>`).join("")}</div>
       <div class="pre">${PRESETS.map(p=>`<button data-a="preset" data-v="${p}">${p}</button>`).join("")}</div></div>
@@ -253,18 +300,40 @@ class LotteryPosPanel extends HTMLElement{
     <div class="row"><label>Speed <select id="ts">${[1,2,3,4,5,6,7,8,9,10].map(n=>`<option ${n===t.speed?"selected":""}>${n}</option>`).join("")}</select></label>
     <label>Color <select id="tc">${cols.map(c=>`<option value="${c[0]}" ${c[0]===t.color?"selected":""}>${c[1]}</option>`).join("")}</select></label>
     <label><input type="checkbox" id="te" ${t.enabled?"checked":""}> Show on screen</label></div><button data-a="saveticker">Save message</button></div>`}
-  gamesCard(){const d=this.s.data;return `<div class="card" style="grid-column:1/-1"><h3>Games &amp; draw schedule</h3><div class="gl">${d.all_games.map(g=>`<div class="gcard" data-id="${g.id}" style="--c:${g.color}">
+  gamesCard(){const d=this.s.data;return `<div class="card" style="grid-column:1/-1"><h3>Games &amp; draw schedule</h3>
+    <p class="note">Format: <b>Digit</b> (0000–9999 etc.), <b>Zodiac</b> (number + symbols), or <b>Jackpot</b> (e.g. 5 from 30 + optional mega).</p>
+    <div class="gl">${d.all_games.map(g=>{
+      const fmt=g.format||"digit";
+      return `<div class="gcard" data-id="${g.id}" style="--c:${g.color}">
     <div class="row"><input class="f-name" value="${esc(g.name)}" style="flex:1;min-width:120px"><input type="color" class="f-color" value="${g.color}"><label><input type="checkbox" class="f-en" ${g.enabled!==false?"checked":""}> Show on sell screen</label></div>
-    <div class="row"><label>Opens <input type="time" class="f-open" value="${g.open_time}"></label><label>Cut-off <input type="time" class="f-cut" value="${g.cutoff}"></label><label>Draw <input type="time" class="f-draw" value="${g.draw_time}"></label></div>
+    <div class="row"><label>Format <select class="f-fmt">
+      <option value="digit" ${fmt==="digit"?"selected":""}>Digit number</option>
+      <option value="zodiac" ${fmt==="zodiac"?"selected":""}>Zodiac + number</option>
+      <option value="jackpot" ${fmt==="jackpot"?"selected":""}>Jackpot balls</option>
+    </select></label>
+    <label>Digits <select class="f-digits">${[1,2,3,4,5,6].map(n=>`<option value="${n}" ${(g.digits||4)==n?"selected":""}>${n} (${"0".repeat(n)}–${"9".repeat(n)})</option>`).join("")}</select></label></div>
+    <div class="row"><label>Main balls <input class="f-mc" type="number" min="1" max="10" value="${g.main_count||5}" style="width:70px"></label>
+      <label>Main max <input class="f-mm" type="number" min="5" max="99" value="${g.main_max||30}" style="width:70px"></label>
+      <label>Mega <select class="f-mega"><option value="0" ${!(g.mega_count)?"selected":""}>None</option><option value="1" ${g.mega_count==1?"selected":""}>1 mega</option></select></label>
+      <label>Mega max <input class="f-mx" type="number" min="1" max="99" value="${g.mega_max||15}" style="width:70px"></label></div>
+    <div class="row"><label>Opens <input type="time" class="f-open" value="${g.open_time||"00:00"}"></label><label>Cut-off <input type="time" class="f-cut" value="${g.cutoff}"></label><label>Draw <input type="time" class="f-draw" value="${g.draw_time}"></label></div>
     <div class="row">${DAYS.map((n,i)=>`<label class="chip"><input type="checkbox" class="f-day" value="${i}" ${!g.draw_days?.length||g.draw_days.includes(i)?"checked":""}> ${n}</label>`).join("")}</div>
     <div class="row">${d.all_bet_types.map(b=>`<label class="chip"><input type="checkbox" class="f-bt" value="${b.key}" ${!g.bet_types.length||g.bet_types.includes(b.key)?"checked":""}> ${b.label}</label>`).join("")}</div>
-    <div class="row"><input type="file" class="f-file" data-id="${g.id}" accept="image/*" style="max-width:190px"><button class="ghost" data-a="glogoclear" data-v="${g.id}">Remove logo</button><span style="flex:1"></span><button data-a="savegame" data-v="${g.id}">Save</button><button class="ghost dng" data-a="delgame" data-v="${g.id}">Delete</button></div></div>`).join("")}</div></div>`}
+    <div class="row"><input type="file" class="f-file" data-id="${g.id}" accept="image/*" style="max-width:190px"><button class="ghost" data-a="glogoclear" data-v="${g.id}">Remove logo</button><span style="flex:1"></span><button data-a="savegame" data-v="${g.id}">Save</button><button class="ghost dng" data-a="delgame" data-v="${g.id}">Delete</button></div></div>`}).join("")}</div></div>`}
   btCard(){const d=this.s.data;return `<div class="card" style="grid-column:1/-1"><h3>Bet types &amp; payouts</h3><table><tr><th>Type</th><th>Label</th><th>Payout ×</th><th>On</th><th></th></tr>${d.all_bet_types.map(b=>`<tr class="btr" data-k="${b.key}"><td>${b.digits} digits · ${b.mode}</td><td><input class="b-label" value="${esc(b.label)}" style="width:130px"></td><td><input class="b-mult" type="number" step="any" value="${b.multiplier}" style="width:90px"></td><td><input type="checkbox" class="b-en" ${b.enabled!==false?"checked":""}></td><td><button data-a="savebt" data-v="${b.key}">Save</button></td></tr>`).join("")}</table></div>`}
   brandCard(){const s=this.s,st=s.data.settings,logo=s.logoDraft!==undefined?s.logoDraft:st.logo;return `<div class="card"><h3>Branding</h3><div class="row"><input id="bn" value="${esc(s.nameDraft??st.name)}" placeholder="Lottery name" style="flex:1" maxlength="40"></div>
       <div class="row">${logo?`<img class="prev" src="${logo}">`:`<span style="color:#94a3b8">No logo yet</span>`}<input type="file" id="logofile" accept="image/*"><button class="ghost" data-a="clearlogo">Remove logo</button></div>
       <button data-a="savebrand">Save branding</button></div>`}
-  addGameCard(){return `<div class="card"><h3>Add game</h3><div class="row"><input id="gn" placeholder="Name"><input id="gc" type="color" value="#64748b"><label>Draw <input id="gt" type="time" value="13:00"></label><label>Cut-off <input id="gk" type="time" value="12:45"></label></div>
-      <div class="row"><input type="file" id="gfile" accept="image/*"><input id="gl" placeholder="or logo URL (/local/...)" style="flex:1"><button data-a="addgame">Add</button></div></div>`}
+  addGameCard(){return `<div class="card"><h3>Add game</h3>
+      <div class="row"><input id="gn" placeholder="Name"><input id="gc" type="color" value="#64748b">
+        <label>Format <select id="gf"><option value="digit">Digit</option><option value="zodiac">Zodiac</option><option value="jackpot">Jackpot</option></select></label>
+        <label>Digits <select id="gd">${[2,3,4,5].map(n=>`<option value="${n}" ${n===4?"selected":""}>${n}</option>`).join("")}</select></label></div>
+      <div class="row"><label>Main count <input id="gmc" type="number" value="5" min="1" max="10" style="width:70px"></label>
+        <label>Main max <input id="gmm" type="number" value="30" min="5" max="99" style="width:70px"></label>
+        <label>Mega <select id="gmega"><option value="0">None</option><option value="1">1 mega</option></select></label>
+        <label>Mega max <input id="gmx" type="number" value="15" min="1" max="99" style="width:70px"></label></div>
+      <div class="row"><label>Draw <input id="gt" type="time" value="13:00"></label><label>Cut-off <input id="gk" type="time" value="12:45"></label></div>
+      <div class="row"><input type="file" id="gfile" accept="image/*"><input id="gl" placeholder="or logo URL (/local/...)" style="flex:1"><button data-a="addgame">Add game</button></div></div>`}
   retailersCard(){const d=this.s.data,list=d.all_retailers||[];
     const cards=list.map(r=>{
       const cs=r.commission_sell??r.commission??0, cr=r.commission_redeem??0;
@@ -425,39 +494,91 @@ class LotteryPosPanel extends HTMLElement{
       +`<div style="text-align:center;font-size:${Math.max(8,d.size-1)}px">${t.id}</div>`
       +(d.footer?`<div style="text-align:center;margin-top:6px">${esc(d.footer)}</div>`:"")+`</div>`}
 
-  paint(){const s=this.s,q=x=>this.shadowRoot.querySelector(x);if(s.tab!=="sell"||!q("#num"))return;const bt=this.bt(),cur=s.data.currency;if(!bt)return;
-    q("#num").innerHTML=`<small>${bt.label}</small>`+Array.from({length:bt.digits},(_,i)=>`<span class="dg ${s.num[i]?"f":""}">${s.num[i]||""}</span>`).join("");
+  paint(){const s=this.s,q=x=>this.shadowRoot.querySelector(x);if(s.tab!=="sell"||!q("#num"))return;const bt=this.bt(),cur=s.data.currency,g=this.primaryGame(),gfmt=this.gameFormat(g),dig=this.gameDigits(g);
+    if(gfmt==="jackpot"){
+      q("#num").innerHTML=`<small>Jackpot</small><span class="amtv" style="font-size:18px">${(s.balls||[]).join(" ")||"—"}${s.mega?" +"+s.mega:""}</span>`;
+    }else{
+      const label=gfmt==="zodiac"?`Zodiac ${dig}d`:(bt?bt.label:`${dig} digits`);
+      q("#num").innerHTML=`<small>${label}</small>`+Array.from({length:dig||4},(_,i)=>`<span class="dg ${s.num[i]?"f":""}">${s.num[i]||""}</span>`).join("");
+    }
     q("#amt").innerHTML=`<small>Amount ${cur}</small><span class="amtv">${s.amt||"0"}</span>`;
     q("#num").classList.toggle("act",s.field==="num");q("#amt").classList.toggle("act",s.field==="amt");
-    const col=k=>s.data.all_games.find(g=>g.id===k)?.color||"#64748b";
-    q("#lines").innerHTML=s.lines.map((l,i)=>`<div class="ln ${s.editIdx===i?"editing":""}" data-a="edit" data-i="${i}"><i style="background:${col(l.game)}"></i><b>${l.number}</b><span>${this.btl(l.bet_type)}<small>${this.gn(l.game)} · ${l.date.slice(5)}</small></span><em>${fmt(l.amount)}</em><button class="ed" data-a="edit" data-i="${i}" title="Edit">✎</button><button data-a="del" data-i="${i}" title="Remove">✕</button></div>`).join("")||`<div class="empty">🎟️<br>No plays yet</div>`;
+    const col=k=>s.data.all_games.find(gg=>gg.id===k)?.color||"#64748b";
+    const lineLabel=l=>{
+      if(l.symbols&&l.symbols.length)return l.number+" · "+l.symbols.join(",");
+      if(l.balls&&l.balls.length)return l.balls.join("-")+(l.mega?"+"+l.mega:"");
+      return l.number;
+    };
+    q("#lines").innerHTML=s.lines.map((l,i)=>`<div class="ln ${s.editIdx===i?"editing":""}" data-a="edit" data-i="${i}"><i style="background:${col(l.game)}"></i><b>${esc(lineLabel(l))}</b><span>${this.btl(l.bet_type)}<small>${this.gn(l.game)} · ${l.date.slice(5)}</small></span><em>${fmt(l.amount)}</em><button class="ed" data-a="edit" data-i="${i}" title="Edit">✎</button><button data-a="del" data-i="${i}" title="Remove">✕</button></div>`).join("")||`<div class="empty">🎟️<br>No plays yet</div>`;
     q("#cnt").textContent=s.lines.length;q("#tot").textContent=`${cur} ${fmt(s.lines.reduce((a,l)=>a+l.amount,0))}`}
 
   onKey(e){const s=this.s;if(!s.data||s.tab!=="sell"||e.composedPath()[0]?.tagName==="INPUT"||e.composedPath()[0]?.tagName==="SELECT")return;
     if(/^\d$/.test(e.key))this.key(e.key);else if(e.key==="Backspace")this.key("DEL");else if(e.key==="Enter"){e.preventDefault();this.add()}else if(e.key==="Tab"){e.preventDefault();s.field=s.field==="num"?"amt":"num";this.paint()}}
-  key(k){const s=this.s,f=s.field,bt=this.bt();if(!bt)return;if(s.fresh?.[f]){s.fresh[f]=false;if(k!=="CLR"&&k!=="DEL")s[f]=""}
+  key(k){const s=this.s,f=s.field,g=this.primaryGame(),fmt=this.gameFormat(g),dig=this.gameDigits(g);
+    if(s.fresh?.[f]){s.fresh[f]=false;if(k!=="CLR"&&k!=="DEL")s[f]=""}
     if(k==="CLR")s[f]="";else if(k==="DEL")s[f]=s[f].slice(0,-1);
-    else if(f==="num"){if(s.num.length<bt.digits)s.num+=k;if(s.num.length===bt.digits)s.field="amt"}
+    else if(f==="num"){if(fmt==="jackpot")return;if(s.num.length<dig)s.num+=k;if(s.num.length===dig)s.field="amt"}
     else if(s.amt.length<7)s.amt=(s.amt==="0"?"":s.amt)+k;
     this.paint()}
-  add(){const s=this.s,bt=this.bt(),amt=parseFloat(s.amt);if(!bt)return this.toast("No bet type available",1);
-    if(s.num.length!==bt.digits)return this.toast(`${bt.label} needs ${bt.digits} digits`,1);
+  add(){const s=this.s,bt=this.bt(),amt=parseFloat(s.amt),g=this.primaryGame(),fmt=this.gameFormat(g),dig=this.gameDigits(g);
+    if(!g)return this.toast("Select a game",1);
     if(!(amt>0))return this.toast("Enter an amount",1);
-    if(s.editIdx!=null){s.lines[s.editIdx]={game:s.sel[0],bet_type:bt.key,number:s.num,amount:amt,date:s.date};s.editIdx=null;s.fresh=null;s.num="";s.field="num";this.toast("Play updated");return this.render()}
-    for(const g of s.sel)s.lines.push({game:g,bet_type:bt.key,number:s.num,amount:amt,date:s.date});
-    s.num="";s.field="num";this.paint()}
+    let line={game:s.sel[0],bet_type:bt?.key||(fmt==="jackpot"?"jackpot":fmt==="zodiac"?"zodiac":""),amount:amt,date:s.date,format:fmt};
+    if(fmt==="digit"){
+      if(!bt)return this.toast("No bet type available",1);
+      const need=dig||bt.digits;
+      if(s.num.length!==need)return this.toast(`Needs ${need} digits`,1);
+      line.bet_type=bt.key;line.number=s.num;
+    }else if(fmt==="zodiac"){
+      if(s.num.length!==dig)return this.toast(`Needs ${dig}-digit number`,1);
+      const syms=s.allZodiac?this.zodiacList().map(z=>z.id):(s.symbols||[]);
+      if(!syms.length)return this.toast("Select zodiac symbols or All",1);
+      line.bet_type="zodiac";line.number=s.num;line.symbols=syms;
+    }else if(fmt==="jackpot"){
+      const mc=+g.main_count||5;
+      if((s.balls||[]).length!==mc)return this.toast(`Pick ${mc} balls`,1);
+      if((+g.mega_count||0)&&!s.mega)return this.toast("Pick mega ball",1);
+      line.bet_type="jackpot";line.balls=[...s.balls].sort();line.mega=s.mega||"";line.number=line.balls.join("-")+(line.mega?"+"+line.mega:"");
+    }
+    if(s.editIdx!=null){s.lines[s.editIdx]=line;s.editIdx=null;s.fresh=null;s.num="";s.balls=[];s.mega="";s.symbols=[];s.allZodiac=false;s.field="num";this.toast("Play updated");return this.render()}
+    if(fmt==="digit"){for(const gid of s.sel)s.lines.push({...line,game:gid})}
+    else s.lines.push(line);
+    s.num="";s.balls=[];s.mega="";s.field="num";this.paint()}
 
   async act(a,ds){const s=this.s;
     switch(a){
       case "theme":s.dark=!s.dark;try{localStorage.setItem("lottery_pos_dark",s.dark?"1":"0")}catch(e){}this.render();break;
+      case "zod":{const id=ds.v;s.allZodiac=false;s.symbols=s.symbols.includes(id)?s.symbols.filter(x=>x!==id):[...s.symbols,id];this.render();break}
+      case "zodall":{s.allZodiac=true;s.symbols=this.zodiacList().map(z=>z.id);this.render();break}
+      case "zodclear":{s.allZodiac=false;s.symbols=[];this.render();break}
+      case "ball":{const g=this.primaryGame(),mc=+g.main_count||5,v=ds.v;
+        if(s.balls.includes(v))s.balls=s.balls.filter(x=>x!==v);
+        else if(s.balls.length<mc)s.balls=[...s.balls,v];
+        else this.toast(`Only ${mc} balls`,1);
+        this.paint();break}
+      case "mega":s.mega=s.mega===ds.v?"":ds.v;this.paint();break;
       case "tab":s.tab=ds.v;this.render();break;
-      case "game":s.sel=s.sel.includes(ds.v)?(s.sel.length>1?s.sel.filter(x=>x!==ds.v):s.sel):[...s.sel,ds.v];this.render();break;
+      case "game":{
+        const ng=s.data.all_games.find(g=>g.id===ds.v);const nf=this.gameFormat(ng);
+        const cur=s.sel[0]?this.gameFormat(s.data.all_games.find(g=>g.id===s.sel[0])):"digit";
+        if(s.sel.includes(ds.v))s.sel=s.sel.length>1?s.sel.filter(x=>x!==ds.v):s.sel;
+        else if(nf!==cur||nf!=="digit"){s.sel=[ds.v];s.symbols=[];s.balls=[];s.mega="";s.allZodiac=false;s.num=""}
+        else s.sel=[...s.sel,ds.v];
+        this.render();break}
       case "bt":s.bt=ds.v;s.num=s.num.slice(0,this.bt().digits);s.field="num";this.render();break;
       case "field":s.field=ds.v;this.paint();break;
       case "key":this.key(ds.v);break;
       case "preset":s.amt=ds.v;if(s.fresh)s.fresh.amt=false;s.field="num";this.paint();break;
       case "add":this.add();break;
-      case "quick":{const n=this.bt().digits;s.num=Array.from({length:n},()=>Math.floor(Math.random()*10)).join("");s.field="amt";this.paint();break}
+      case "quick":{const g=this.primaryGame(),fmt=this.gameFormat(g);
+        if(fmt==="jackpot"){
+          const mc=+g.main_count||5,mm=+g.main_max||30,pool=Array.from({length:mm},(_,i)=>String(i+1).padStart(2,"0"));
+          s.balls=[];while(s.balls.length<mc){const x=pool[Math.floor(Math.random()*pool.length)];if(!s.balls.includes(x))s.balls.push(x)}
+          if(+g.mega_count)s.mega=String(1+Math.floor(Math.random()*(+g.mega_max||15))).padStart(2,"0");
+          s.field="amt";this.render();break}
+        if(fmt==="zodiac"){const dig=this.gameDigits(g);s.num=Array.from({length:dig},()=>Math.floor(Math.random()*10)).join("");
+          s.symbols=[this.zodiacList()[Math.floor(Math.random()*this.zodiacList().length)].id];s.allZodiac=false;s.field="amt";this.render();break}
+        const n=this.gameDigits(g)||this.bt()?.digits||4;s.num=Array.from({length:n},()=>Math.floor(Math.random()*10)).join("");s.field="amt";this.paint();break}
       case "clear":s.lines=[];s.editIdx=null;s.fresh=null;this.render();break;
       case "del":{const i=+ds.i;s.lines.splice(i,1);if(s.editIdx===i){s.editIdx=null;s.fresh=null;s.num=""}else if(s.editIdx>i)s.editIdx--;this.render();break}
       case "edit":{const l=s.lines[+ds.i];if(!l)break;s.editIdx=+ds.i;s.sel=[l.game];s.bt=l.bet_type;s.num=l.number;s.amt=String(l.amount);s.date=l.date;s.field="num";s.fresh={num:true,amt:true};this.render();break}
@@ -472,9 +593,10 @@ class LotteryPosPanel extends HTMLElement{
       case "redeem":{const id=await this.modal({title:"Pay winner",input:"Scan or type ticket number",ok:"Check ticket"});if(id)this.scanned(id);break}
       case "results":{const r=await this.call("draw_results",{date:s.date});if(r)this.print(`<html><body style="font:13px monospace;width:72mm"><h3>RESULTADO ${s.date}</h3>${r.map(x=>`<p><b>${x.game}</b><br>${x.numbers.join(" - ")}</p>`).join("")||"No results yet"}</body></html>`);break}
       case "report1":{const t=today(),r=await this.call("report",{date_from:t,date_to:t});if(r)this.print(this.reportHTML(r));break}
-      case "savegame":{const c=this.shadowRoot.querySelector(`.gcard[data-id="${ds.v}"]`),v=x=>c.querySelector(x),all=[...c.querySelectorAll(".f-bt")],pick=all.filter(i=>i.checked).map(i=>i.value);
-        if(!pick.length)return this.toast("Pick at least one bet type",1);const days=[...c.querySelectorAll(".f-day")].filter(i=>i.checked).map(i=>+i.value);if(!days.length)return this.toast("Pick at least one draw day",1);
-        const msg={game_id:String(ds.v),name:v(".f-name").value,color:v(".f-color").value,enabled:v(".f-en").checked,open_time:v(".f-open").value,cutoff:v(".f-cut").value,draw_time:v(".f-draw").value,bet_types:pick.length===all.length?[]:pick,draw_days:days.length===7?[]:days};
+      case "savegame":{const c=this.shadowRoot.querySelector(`.gcard[data-id="${ds.v}"]`);if(!c)break;const v=x=>c.querySelector(x),all=[...c.querySelectorAll(".f-bt")],pick=all.filter(i=>i.checked).map(i=>i.value);
+        const days=[...c.querySelectorAll(".f-day")].filter(i=>i.checked).map(i=>+i.value);if(!days.length)return this.toast("Pick at least one draw day",1);
+        const msg={game_id:String(ds.v),name:v(".f-name").value,color:v(".f-color").value,enabled:v(".f-en").checked,open_time:v(".f-open").value,cutoff:v(".f-cut").value,draw_time:v(".f-draw").value,bet_types:pick.length===all.length||!pick.length?[]:pick,draw_days:days.length===7?[]:days,
+          format:v(".f-fmt").value,digits:+v(".f-digits").value,main_count:+v(".f-mc").value,main_max:+v(".f-mm").value,mega_count:+v(".f-mega").value,mega_max:+v(".f-mx").value};
         if(s.glogos[ds.v]!==undefined)msg.logo=s.glogos[ds.v];
         if(await this.call("update_game",msg)){delete s.glogos[ds.v];s.data=await this.ws("state");this.toast("Game saved");this.render()}break}
       case "glogoclear":s.glogos[ds.v]="";this.toast("Logo is removed when you press Save");break;
@@ -553,7 +675,9 @@ class LotteryPosPanel extends HTMLElement{
         const r=await this.call("add_retailer",payload);
         if(r){s.data=await this.ws("state");this.toast("Retailer added");this.render()}
         break}
-      case "addgame":{const q=x=>this.shadowRoot.querySelector(x).value;if(await this.call("add_game",{name:q("#gn"),color:q("#gc"),draw_time:q("#gt"),cutoff:q("#gk"),logo:s.gameLogo||q("#gl")})){s.gameLogo="";s.data=await this.ws("state");this.toast("Game added");this.render()}break}
+      case "addgame":{const q=x=>this.shadowRoot.querySelector(x)?.value??"";
+        if(!q("#gn").trim())return this.toast("Enter a game name",1);
+        if(await this.call("add_game",{name:q("#gn"),color:q("#gc"),draw_time:q("#gt"),cutoff:q("#gk"),logo:s.gameLogo||q("#gl"),format:q("#gf")||"digit",digits:+q("#gd")||4,main_count:+q("#gmc")||5,main_max:+q("#gmm")||30,mega_count:+q("#gmega")||0,mega_max:+q("#gmx")||15})){s.gameLogo="";s.data=await this.ws("state");this.toast("Game added");this.render()}break}
     }}
 
   async scanned(id){if(!id)return;id=(String(id).match(/\d{12,}$/)||[String(id)])[0];const s=this.s,cur=s.data.currency;s.scan="";
@@ -563,7 +687,7 @@ class LotteryPosPanel extends HTMLElement{
     else if(t.status==="cancelled")this.toast("Ticket was cancelled",1);
     else if(t.status==="lost"){this.load(t);this.toast("Not a winner - lines loaded to replay")}
     else{this.load(t);this.toast("Draw pending - lines loaded to replay")}}
-  load(t){const s=this.s;s.tab="sell";s.editIdx=null;s.lines=t.lines.map(l=>({game:l.game,bet_type:l.bet_type,number:l.number,amount:l.amount,date:l.date<today()?s.date:l.date}));this.render();this.toast(`Replay: ${s.lines.length} line(s) loaded`)}
+  load(t){const s=this.s;s.tab="sell";s.editIdx=null;s.lines=t.lines.map(l=>({game:l.game,bet_type:l.bet_type,number:l.number,amount:l.amount,date:l.date<today()?s.date:l.date,symbols:l.symbols,balls:l.balls,mega:l.mega,format:l.format}));this.render();this.toast(`Replay: ${s.lines.length} line(s) loaded`)}
 
   docHTML(inner,d){return `<html><head><style>@page{margin:0}body{margin:0;padding:2mm;width:${d.width}mm}</style></head><body>${inner}</body></html>`}
   receipt(t,title){const d=this.saved();return this.docHTML(this.receiptInner(t,title,d),d)}

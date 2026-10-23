@@ -13,7 +13,7 @@ from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
 
 from .const import (DEFAULT_BET_TYPES, DEFAULT_GAMES, DEFAULT_PROMOTIONS, DOMAIN,
-                    SIGNAL_UPDATE, STORAGE_KEY, STORAGE_VERSION, TICKET_DEFAULTS)
+                    SIGNAL_UPDATE, STORAGE_KEY, STORAGE_VERSION, TICKET_DEFAULTS, ZODIAC_SYMBOLS)
 
 
 class LotteryError(ValueError):
@@ -47,8 +47,21 @@ class LotteryStore:
             g.setdefault("enabled", True)
             g.setdefault("bet_types", [])
             g.setdefault("draw_days", [])
+            g.setdefault("format", "digit")  # digit | zodiac | jackpot
+            g.setdefault("digits", 4)  # digit / zodiac number length
+            g.setdefault("main_count", 5)  # jackpot main balls to pick
+            g.setdefault("main_max", 30)  # jackpot main pool 01..main_max
+            g.setdefault("mega_count", 0)  # 0 or 1
+            g.setdefault("mega_max", 15)
+            g.setdefault("symbols", [z["id"] for z in ZODIAC_SYMBOLS])  # zodiac ids enabled
+            if not isinstance(g.get("id"), str):
+                g["id"] = str(g["id"])
         for b in data["bet_types"]:
             b.setdefault("enabled", True)
+        known_bt = {b["key"] for b in data["bet_types"]}
+        for b in DEFAULT_BET_TYPES:
+            if b["key"] not in known_bt:
+                data["bet_types"].append(copy.deepcopy(b))
         for i, r in enumerate(data.get("retailers", [])):
             r.setdefault("number", f"{i+1:03d}")
             r.setdefault("first_name", "")
@@ -126,19 +139,83 @@ class LotteryStore:
         clean = []
         for ln in lines:
             game = self._find("games", "id", ln["game"], "game")
-            bt = self._find("bet_types", "key", ln["bet_type"], "bet type")
+            fmt = game.get("format", "digit")
+            bt_key = ln.get("bet_type") or ("jackpot" if fmt == "jackpot" else "zodiac" if fmt == "zodiac" else None)
+            if not bt_key:
+                raise LotteryError("Bet type required")
+            bt = self._find("bet_types", "key", bt_key, "bet type")
             if not game.get("enabled", True):
                 raise LotteryError(f"{game['name']} is not on sale")
             allowed = game.get("bet_types") or []
-            if not bt.get("enabled", True) or (allowed and bt["key"] not in allowed):
-                raise LotteryError(f"{bt['label']} is not available for {game['name']}")
-            num, amt = str(ln["number"]), round(float(ln["amount"]), 2)
-            if not (num.isdigit() and len(num) == bt["digits"]):
-                raise LotteryError(f"{bt['label']} needs {bt['digits']} digits")
+            if fmt == "digit":
+                if not bt.get("enabled", True) or (allowed and bt["key"] not in allowed):
+                    raise LotteryError(f"{bt['label']} is not available for {game['name']}")
+            amt = round(float(ln["amount"]), 2)
             if amt <= 0:
                 raise LotteryError("Amount must be above 0")
-            line = {"game": game["id"], "bet_type": bt["key"], "number": num, "amount": amt,
-                    "date": ln["date"], "prize": 0.0, "settled": False}
+            line = {"game": game["id"], "bet_type": bt["key"], "amount": amt,
+                    "date": ln["date"], "prize": 0.0, "settled": False, "format": fmt}
+            if fmt == "digit":
+                digits = int(game.get("digits") or bt.get("digits") or 4)
+                num = str(ln.get("number", "")).strip()
+                if not (num.isdigit() and len(num) == digits):
+                    raise LotteryError(f"{game['name']} needs a {digits}-digit number (0–{'9'*digits})")
+                line["number"] = num
+            elif fmt == "zodiac":
+                digits = int(game.get("digits") or 2)
+                num = str(ln.get("number", "")).strip()
+                if not (num.isdigit() and len(num) == digits):
+                    raise LotteryError(f"{game['name']} needs a {digits}-digit number with zodiac symbol(s)")
+                allowed_sym = set(game.get("symbols") or [z["id"] for z in ZODIAC_SYMBOLS])
+                syms = ln.get("symbols") or []
+                if not isinstance(syms, list) or not syms:
+                    raise LotteryError("Select at least one zodiac symbol (or All)")
+                syms = [str(s) for s in syms]
+                bad = [s for s in syms if s not in allowed_sym]
+                if bad:
+                    raise LotteryError(f"Unknown symbol(s): {', '.join(bad)}")
+                # unique preserve order
+                seen = set()
+                uniq = []
+                for s in syms:
+                    if s not in seen:
+                        seen.add(s)
+                        uniq.append(s)
+                line["number"] = num
+                line["symbols"] = uniq
+            elif fmt == "jackpot":
+                main_count = int(game.get("main_count") or 5)
+                main_max = int(game.get("main_max") or 30)
+                mega_count = int(game.get("mega_count") or 0)
+                mega_max = int(game.get("mega_max") or 15)
+                balls = ln.get("balls") or []
+                if not isinstance(balls, list):
+                    raise LotteryError("Jackpot balls must be a list")
+                norm = []
+                for b in balls:
+                    s = str(b).strip()
+                    if not s.isdigit():
+                        raise LotteryError(f"Invalid ball: {b}")
+                    n = int(s)
+                    if not 1 <= n <= main_max:
+                        raise LotteryError(f"Ball must be 01–{main_max:02d}")
+                    norm.append(f"{n:02d}")
+                if len(set(norm)) != len(norm):
+                    raise LotteryError("Jackpot balls must be unique")
+                if len(norm) != main_count:
+                    raise LotteryError(f"Pick exactly {main_count} balls from 01–{main_max:02d}")
+                line["balls"] = sorted(norm)
+                line["number"] = "-".join(line["balls"])
+                if mega_count:
+                    mega = str(ln.get("mega", "")).strip()
+                    if not mega.isdigit() or not 1 <= int(mega) <= mega_max:
+                        raise LotteryError(f"Mega ball must be 01–{mega_max:02d}")
+                    line["mega"] = f"{int(mega):02d}"
+                    line["number"] = f"{line['number']}+{line['mega']}"
+                else:
+                    line["mega"] = ""
+            else:
+                raise LotteryError(f"Unknown game format: {fmt}")
             try:
                 wd = _date.fromisoformat(line["date"]).weekday()
             except ValueError as err:
@@ -280,7 +357,44 @@ class LotteryStore:
 
     # ---------- results & settlement ----------
     def _prize(self, ln: dict, nums: list[str]) -> float:
+        """Settle a play against drawn numbers.
+
+        nums layout depends on format:
+          digit: ["4821", "0377", "9150"]  (1st/2nd/3rd)
+          zodiac: ["12", "rat"] or ["12", "rat", "ox"]  (number + winning symbol ids)
+          jackpot: main balls then optional mega e.g. ["01","05","12","20","28","07"]
+        """
         bt = self._find("bet_types", "key", ln["bet_type"], "bet type")
+        fmt = ln.get("format") or "digit"
+        if fmt == "zodiac":
+            if not nums:
+                return 0.0
+            drawn_num = str(nums[0]).zfill(len(ln.get("number", "00")))
+            drawn_syms = set(str(x) for x in nums[1:])
+            play_syms = set(ln.get("symbols") or [])
+            if ln.get("number") == drawn_num and play_syms & drawn_syms:
+                return round(ln["amount"] * float(bt.get("multiplier", 1)), 2)
+            return 0.0
+        if fmt == "jackpot":
+            game = self._find("games", "id", ln["game"], "game")
+            main_count = int(game.get("main_count") or 5)
+            mega_count = int(game.get("mega_count") or 0)
+            if len(nums) < main_count:
+                return 0.0
+            drawn_main = set(f"{int(x):02d}" for x in nums[:main_count])
+            play_main = set(ln.get("balls") or [])
+            matched = len(drawn_main & play_main)
+            mega_ok = True
+            if mega_count:
+                if len(nums) < main_count + 1:
+                    return 0.0
+                drawn_mega = f"{int(nums[main_count]):02d}"
+                mega_ok = (ln.get("mega") or "") == drawn_mega
+            # simple tier: full main (+ mega if required) pays multiplier
+            if matched == main_count and mega_ok:
+                return round(ln["amount"] * float(bt.get("multiplier", 1)), 2)
+            return 0.0
+        # digit / classic
         n, first, mode, d = ln["number"], nums[0], bt["mode"], bt["digits"]
         if mode == "exact":
             hits = n == first[-d:]
@@ -290,15 +404,28 @@ class LotteryStore:
             hits = n in (first[:2], first[-2:])
         elif mode == "back":
             hits = n == first[-2:]
-        else:  # chances: last 2 digits of any of the drawn numbers
+        else:  # chances
             hits = sum(1 for x in nums if x[-2:] == n)
         return round(ln["amount"] * bt["multiplier"] * int(hits), 2)
 
     def set_results(self, game: str, d: str, numbers: list[str]) -> list[dict]:
-        self._find("games", "id", game, "game")
+        g = self._find("games", "id", game, "game")
         nums = [str(n).strip() for n in numbers if str(n).strip()]
-        if not nums or any(not (n.isdigit() and len(n) == 4) for n in nums):
-            raise LotteryError("Results must be 4-digit numbers (1st, 2nd, 3rd prize)")
+        if not nums:
+            raise LotteryError("Enter at least one result value")
+        fmt = g.get("format", "digit")
+        if fmt == "digit":
+            dig = int(g.get("digits") or 4)
+            # allow classic 4-digit draws or game digit length
+            if any(not n.isdigit() for n in nums):
+                raise LotteryError("Digit game results must be numbers")
+        elif fmt == "zodiac":
+            if len(nums) < 2:
+                raise LotteryError("Zodiac results: number then winning symbol id(s)")
+        elif fmt == "jackpot":
+            need = int(g.get("main_count") or 5) + (1 if int(g.get("mega_count") or 0) else 0)
+            if len(nums) < need:
+                raise LotteryError(f"Jackpot results need {need} values (main balls + mega if any)")
         self.data["results"][f"{game}|{d}"] = nums
         winners = []
         for t in self.data["tickets"].values():
@@ -820,7 +947,7 @@ class LotteryStore:
         g = self._find("games", "id", gid, "game")
         new = dict(g)
         for k in ("name", "color", "draw_time", "open_time", "cutoff", "logo"):
-            if k in f:
+            if k in f and f[k] is not None:
                 new[k] = f[k]
         if "enabled" in f:
             new["enabled"] = bool(f["enabled"])
@@ -830,22 +957,43 @@ class LotteryStore:
                 raise LotteryError("Unknown bet type")
             new["bet_types"] = list(f["bet_types"])
         if "draw_days" in f:
-            days = f["draw_days"]
-            if any(not isinstance(d, int) or not 0 <= d <= 6 for d in days):
-                raise LotteryError("Draw days must be 0 (Mon) to 6 (Sun)")
-            new["draw_days"] = sorted(set(days))
-        if not str(new["name"]).strip():
-            raise LotteryError("Game name is required")
-        for k in ("draw_time", "open_time", "cutoff"):
-            if not re.fullmatch(r"\d\d:\d\d", new[k]):
-                raise LotteryError("Times must be HH:MM")
-        if new["open_time"] >= new["cutoff"]:
-            raise LotteryError("Open time must be before the cut-off")
-        if new["logo"] and not (new["logo"].startswith(("data:image/", "/local/")) and len(new["logo"]) < 300_000):
-            raise LotteryError("Invalid logo")
+            days = [int(x) for x in f["draw_days"]]
+            if any(d < 0 or d > 6 for d in days):
+                raise LotteryError("Draw days must be 0–6")
+            new["draw_days"] = days
+        if "format" in f:
+            fmt = str(f["format"])
+            if fmt not in ("digit", "zodiac", "jackpot"):
+                raise LotteryError("Format must be digit, zodiac or jackpot")
+            new["format"] = fmt
+        if "digits" in f:
+            dig = int(f["digits"])
+            if not 1 <= dig <= 6:
+                raise LotteryError("Digits must be 1–6")
+            new["digits"] = dig
+        for k, lo, hi in (("main_count", 1, 10), ("main_max", 5, 99), ("mega_max", 1, 99)):
+            if k in f:
+                v = int(f[k])
+                if not lo <= v <= hi:
+                    raise LotteryError(f"{k} must be {lo}–{hi}")
+                new[k] = v
+        if "mega_count" in f:
+            mc = int(f["mega_count"])
+            if mc not in (0, 1):
+                raise LotteryError("mega_count must be 0 or 1")
+            new["mega_count"] = mc
+        if "symbols" in f:
+            known = {z["id"] for z in ZODIAC_SYMBOLS}
+            syms = list(f["symbols"] or [])
+            bad = [s for s in syms if s not in known]
+            if bad:
+                raise LotteryError(f"Unknown symbols: {', '.join(bad)}")
+            new["symbols"] = syms or [z["id"] for z in ZODIAC_SYMBOLS]
+        g.clear()
         g.update(new)
         self._save()
         return g
+
 
     def delete_game(self, gid: str) -> None:
         g = self._find("games", "id", gid, "game")
@@ -862,13 +1010,40 @@ class LotteryStore:
         self._save()
         return b
 
-    def add_game(self, name: str, color: str = "#64748b", draw_time: str = "12:00",
-                 cutoff: str = "11:45", logo: str = "") -> dict:
-        gid = re.sub(r"\W+", "_", name.lower()).strip("_")
-        if not gid or any(g["id"] == gid for g in self.data["games"]):
+    def add_game(self, fields: dict) -> dict:
+        name = str(fields.get("name", "")).strip()
+        if not name:
+            raise LotteryError("Game name is required")
+        gid = re.sub(r"\W+", "_", name.lower()).strip("_") or secrets.token_hex(3)
+        if any(g["id"] == gid for g in self.data["games"]):
             raise LotteryError("Game already exists")
-        g = {"id": gid, "name": name, "color": color, "draw_time": draw_time, "open_time": "00:00", "cutoff": cutoff,
-             "logo": logo, "enabled": True, "bet_types": [], "draw_days": []}
+        g = {
+            "id": gid,
+            "name": name[:40],
+            "color": str(fields.get("color") or "#64748b"),
+            "draw_time": str(fields.get("draw_time") or "12:00"),
+            "cutoff": str(fields.get("cutoff") or "11:45"),
+            "open_time": str(fields.get("open_time") or "00:00"),
+            "logo": str(fields.get("logo") or ""),
+            "enabled": True,
+            "bet_types": list(fields.get("bet_types") or []),
+            "draw_days": list(fields.get("draw_days") or []),
+            "format": str(fields.get("format") or "digit"),
+            "digits": int(fields.get("digits") or 4),
+            "main_count": int(fields.get("main_count") or 5),
+            "main_max": int(fields.get("main_max") or 30),
+            "mega_count": int(fields.get("mega_count") or 0),
+            "mega_max": int(fields.get("mega_max") or 15),
+            "symbols": list(fields.get("symbols") or [z["id"] for z in ZODIAC_SYMBOLS]),
+        }
+        if g["format"] not in ("digit", "zodiac", "jackpot"):
+            raise LotteryError("Format must be digit, zodiac or jackpot")
+        if not 1 <= g["digits"] <= 6:
+            raise LotteryError("Digits must be 1–6")
+        if not 1 <= g["main_count"] <= 10 or not 5 <= g["main_max"] <= 99:
+            raise LotteryError("Invalid jackpot main ball settings")
+        if g["mega_count"] not in (0, 1) or not 1 <= g["mega_max"] <= 99:
+            raise LotteryError("Invalid mega ball settings")
         self.data["games"].append(g)
         self._save()
         return g

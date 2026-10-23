@@ -2,11 +2,20 @@
 import voluptuous as vol
 from homeassistant.components import websocket_api
 
-from .const import DOMAIN
+from .const import DOMAIN, ZODIAC_SYMBOLS
 from .store import LotteryError
 
-_LINE = vol.Schema({vol.Required("game"): str, vol.Required("bet_type"): str, vol.Required("number"): str,
-                    vol.Required("amount"): vol.Coerce(float), vol.Required("date"): str})
+# Flexible line: digit uses number; zodiac adds symbols; jackpot uses balls + mega
+_LINE = vol.Schema({
+    vol.Required("game"): str,
+    vol.Required("bet_type"): str,
+    vol.Optional("number", default=""): str,
+    vol.Required("amount"): vol.Coerce(float),
+    vol.Required("date"): str,
+    vol.Optional("symbols", default=[]): [str],
+    vol.Optional("balls", default=[]): [str],
+    vol.Optional("mega", default=""): str,
+}, extra=vol.ALLOW_EXTRA)
 
 
 def _cmd(name, schema=None, admin=False):
@@ -32,7 +41,8 @@ def _state(s, m):
             "bet_types": [b for b in d["bet_types"] if b.get("enabled", True)], "all_bet_types": d["bet_types"],
             "currency": d["currency"], "settings": d["settings"],
             "retailers": [r for r in d["retailers"] if r.get("active", True)], "all_retailers": d["retailers"],
-            "promotions": d.get("promotions", []), "summary": s.summary()}
+            "promotions": d.get("promotions", []), "summary": s.summary(),
+            "zodiac_symbols": ZODIAC_SYMBOLS}
 
 @_cmd("sell", {vol.Required("retailer_id"): str, vol.Required("lines"): [_LINE]})
 def _sell(s, m): return s.sell(m["retailer_id"], m["lines"])
@@ -76,10 +86,21 @@ def _results(s, m): return {"winners": s.set_results(m["game"], m["date"], m["nu
 }, admin=True)
 def _add_r(s, m): return s.add_retailer(m)
 
-@_cmd("add_game", {vol.Required("name"): str, vol.Optional("color", default="#64748b"): str,
-                   vol.Optional("draw_time", default="12:00"): str, vol.Optional("cutoff", default="11:45"): str,
-                   vol.Optional("logo", default=""): str}, admin=True)
-def _add_g(s, m): return s.add_game(m["name"], m["color"], m["draw_time"], m["cutoff"], m["logo"])
+@_cmd("add_game", {
+    vol.Required("name"): str,
+    vol.Optional("color", default="#64748b"): str,
+    vol.Optional("draw_time", default="12:00"): str,
+    vol.Optional("cutoff", default="11:45"): str,
+    vol.Optional("logo", default=""): str,
+    vol.Optional("format", default="digit"): str,
+    vol.Optional("digits", default=4): vol.Coerce(int),
+    vol.Optional("main_count", default=5): vol.Coerce(int),
+    vol.Optional("main_max", default=30): vol.Coerce(int),
+    vol.Optional("mega_count", default=0): vol.Coerce(int),
+    vol.Optional("mega_max", default=15): vol.Coerce(int),
+    vol.Optional("symbols", default=[]): [str],
+}, admin=True)
+def _add_g(s, m): return s.add_game(m)
 
 @_cmd("set_branding", {vol.Required("name"): str, vol.Optional("logo", default=""): str}, admin=True)
 def _brand(s, m): return s.set_branding(m["name"], m["logo"])
@@ -89,10 +110,16 @@ def _brand(s, m): return s.set_branding(m["name"], m["logo"])
 def _ticker(s, m): return s.set_ticker(m["text"], m["enabled"], m["speed"], m["color"])
 
 # NOTE: never use schema key "id" — it collides with the WebSocket message id (int).
-@_cmd("update_game", {vol.Required("game_id"): str, vol.Optional("name"): str, vol.Optional("color"): str,
-                      vol.Optional("draw_time"): str, vol.Optional("open_time"): str, vol.Optional("cutoff"): str,
-                      vol.Optional("enabled"): bool, vol.Optional("bet_types"): [str], vol.Optional("logo"): str,
-                      vol.Optional("draw_days"): [vol.All(int, vol.Range(min=0, max=6))]}, admin=True)
+@_cmd("update_game", {
+    vol.Required("game_id"): str, vol.Optional("name"): str, vol.Optional("color"): str,
+    vol.Optional("draw_time"): str, vol.Optional("open_time"): str, vol.Optional("cutoff"): str,
+    vol.Optional("enabled"): bool, vol.Optional("bet_types"): [str], vol.Optional("logo"): str,
+    vol.Optional("draw_days"): [vol.All(int, vol.Range(min=0, max=6))],
+    vol.Optional("format"): str, vol.Optional("digits"): vol.Coerce(int),
+    vol.Optional("main_count"): vol.Coerce(int), vol.Optional("main_max"): vol.Coerce(int),
+    vol.Optional("mega_count"): vol.Coerce(int), vol.Optional("mega_max"): vol.Coerce(int),
+    vol.Optional("symbols"): [str],
+}, admin=True)
 def _upd_g(s, m): return s.update_game(m["game_id"], {k: v for k, v in m.items() if k not in ("game_id", "type")})
 
 @_cmd("delete_game", {vol.Required("game_id"): str}, admin=True)

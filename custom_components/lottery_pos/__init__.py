@@ -40,10 +40,12 @@ def _register_services(hass):
             vol.Optional("commission_redeem", default=0): vol.Coerce(float),
             vol.Optional("commission"): vol.Coerce(float),
         }))
-    reg(DOMAIN, "add_game", wrap(lambda s, d: s.add_game(d["name"], d.get("color", "#64748b"), d.get("draw_time", "12:00"),
-                                                         d.get("cutoff", "11:45"), d.get("logo", ""))),
+    reg(DOMAIN, "add_game", wrap(lambda s, d: s.add_game(d)),
         vol.Schema({vol.Required("name"): str, vol.Optional("color"): str, vol.Optional("draw_time"): str,
-                    vol.Optional("cutoff"): str, vol.Optional("logo"): str}))
+                    vol.Optional("cutoff"): str, vol.Optional("logo"): str, vol.Optional("format"): str,
+                    vol.Optional("digits"): vol.Coerce(int), vol.Optional("main_count"): vol.Coerce(int),
+                    vol.Optional("main_max"): vol.Coerce(int), vol.Optional("mega_count"): vol.Coerce(int),
+                    vol.Optional("mega_max"): vol.Coerce(int)}))
 
 
 async def async_setup_entry(hass, entry) -> bool:
