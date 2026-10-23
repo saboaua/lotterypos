@@ -284,7 +284,7 @@ class LotteryPosPanel extends HTMLElement{
         </div>
         <label style="display:block;font-size:11px;font-weight:600;color:var(--mut);text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px">Address</label>
         <input class="r-addr" value="${esc(r.address||"")}" maxlength="200" style="width:100%;height:42px;border:1px solid var(--line);background:var(--key);border-radius:12px;padding:0 12px;margin-bottom:10px">
-        <div class="btn-row"><button data-a="saveret" data-v="${esc(r.id)}">Save retailer</button></div>
+        <div class="btn-row"><button data-a="saveret" data-v="${esc(r.id)}" style="min-width:140px">Save retailer</button></div>
       </div>`}).join("")||`<div class="empty">No retailers yet</div>`;
     return `<div class="card" style="grid-column:1/-1"><h3>Retailers</h3>
       <p class="note">Each shop has a retailer number, contact details, sell commission (% of ticket sales) and redeem commission (% of prizes paid out at that shop).</p>
@@ -301,9 +301,9 @@ class LotteryPosPanel extends HTMLElement{
       </div>
       <label style="display:block;font-size:11px;font-weight:600;color:var(--mut);text-transform:uppercase;letter-spacing:.04em;margin:8px 0 4px">Address</label>
       <input id="rn-addr" placeholder="Street, city" maxlength="200" style="width:100%;height:42px;border:1px solid var(--line);background:var(--key);border-radius:12px;padding:0 12px;margin-bottom:10px">
-      <div class="btn-row"><button data-a="addret">Add retailer</button></div>
+      <div class="btn-row"><button data-a="addret" style="min-width:160px">+ Add retailer</button></div>
     </div>`}
-  promosCard()  promosCard(){const s=this.s,list=s.data.promotions||[],games=s.data.all_games||[],cur=s.data.currency||"";
+  promosCard(){const s=this.s,list=s.data.promotions||[],games=s.data.all_games||[],cur=s.data.currency||"";
     const trigLabel={min_plays:"Min. plays",min_games:"Min. distinct games",min_amount:"Min. purchase amount",min_lines:"Min. plays"};
     const gameChecks=(sel,cls)=>games.map(g=>`<label class="chip"><input type="checkbox" class="${cls}" value="${esc(g.id)}" ${(sel||[]).includes(g.id)?"checked":""}> ${esc(g.name)}</label>`).join("")||`<span class="note">No games defined</span>`;
     const scopeTxt=p=>{const g=p.games||[];return g.length?g.map(id=>games.find(x=>x.id===id)?.name||id).join(", "):"All games"};
@@ -535,8 +535,24 @@ class LotteryPosPanel extends HTMLElement{
       case "delpromo":{if(!await this.modal({title:"Delete promotion",text:"Remove this promotion? Existing ticket codes stay valid.",ok:"Delete"}))break;
         const r=await this.call("delete_promotion",{promotion_id:String(ds.v)});
         if(r!==null){s.data=await this.ws("state");this.toast("Deleted");this.render()}break}
-      case "addret":{const q=x=>this.shadowRoot.querySelector(x)?.value??"";
-        if(await this.call("add_retailer",{name:q("#rn"),number:q("#rn-num"),first_name:q("#rn-fn"),last_name:q("#rn-ln"),address:q("#rn-addr"),phone:q("#rn-ph"),commission_sell:+q("#rc")||0,commission_redeem:+q("#rc-r")||0,active:true})){s.data=await this.ws("state");this.toast("Retailer added");this.render()}break}
+      case "addret":{
+        const q=sel=>{const el=this.shadowRoot.querySelector(sel);return el?String(el.value||"").trim():""};
+        const name=q("#rn");
+        if(!name){this.toast("Enter a shop name",1);return}
+        const payload={
+          name,
+          number:q("#rn-num"),
+          first_name:q("#rn-fn"),
+          last_name:q("#rn-ln"),
+          address:q("#rn-addr"),
+          phone:q("#rn-ph"),
+          commission_sell:parseFloat(q("#rc"))||0,
+          commission_redeem:parseFloat(q("#rc-r"))||0,
+          active:true
+        };
+        const r=await this.call("add_retailer",payload);
+        if(r){s.data=await this.ws("state");this.toast("Retailer added");this.render()}
+        break}
       case "addgame":{const q=x=>this.shadowRoot.querySelector(x).value;if(await this.call("add_game",{name:q("#gn"),color:q("#gc"),draw_time:q("#gt"),cutoff:q("#gk"),logo:s.gameLogo||q("#gl")})){s.gameLogo="";s.data=await this.ws("state");this.toast("Game added");this.render()}break}
     }}
 
