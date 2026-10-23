@@ -213,7 +213,7 @@ button{cursor:pointer;border:none;font-family:inherit}
 
 class LotteryPosPanel extends HTMLElement{
   constructor(){super();this.attachShadow({mode:"open"});
-    this.s={tab:"sell",sel:[],bt:"",date:today(),num:"",amt:"",field:"num",lines:[],retailer:"",data:null,scan:"",report:null,glogos:{},sub:"games",symbols:[],balls:[],mega:"",allZodiac:false,draws:1,editGame:null};
+    this.s={tab:"sell",sel:[],bt:"",date:today(),num:"",amt:"",field:"num",lines:[],retailer:"",data:null,scan:"",report:null,glogos:{},sub:"games",symbols:[],balls:[],mega:"",allZodiac:false,draws:1,editGame:null,previewGame:null};
     this._kh=e=>this.onKey(e)}
   connectedCallback(){window.addEventListener("keydown",this._kh)}
   disconnectedCallback(){window.removeEventListener("keydown",this._kh);clearInterval(this._tm)}
@@ -271,6 +271,13 @@ class LotteryPosPanel extends HTMLElement{
     this.shadowRoot.querySelectorAll(".f-file").forEach(inp=>inp.onchange=async e=>{const f=e.target.files[0];if(!f)return;try{s.glogos[inp.dataset.id]=await this.shrink(f,96);this.toast("Logo ready - press Save on the game")}catch(x){this.toast(x.message,1)}});
     this.shadowRoot.querySelectorAll(".d-f").forEach(el=>{const h=()=>{const k=el.dataset.k,d=this.design();d[k]=el.type==="checkbox"?el.checked:["size","qr_size","width","logo_height"].includes(k)?+el.value:el.value;this.refreshPreview()};el.addEventListener("input",h);el.addEventListener("change",h)});
     this.refreshPreview();this.paint();
+    const pg=this.shadowRoot.querySelector("#preview-game");
+    if(pg){if(!this.s.previewGame)this.s.previewGame=pg.value;pg.onchange=()=>{this.s.previewGame=pg.value;this.refreshPreview()}}
+    // live MOTD preview while editing message fields
+    this.shadowRoot.querySelectorAll(".tm-text,.tm-en,.tm-game,.tm-start,.tm-end").forEach(el=>{
+      el.addEventListener("input",()=>this.refreshPreview());
+      el.addEventListener("change",()=>this.refreshPreview());
+    });
     const dc=this.shadowRoot.querySelector("#draws-custom");
     if(dc){dc.onchange=e=>{s.draws=Math.max(1,Math.min(28,+e.target.value||1));this.render()};dc.onkeydown=e=>{if(e.key==="Enter"){s.draws=Math.max(1,Math.min(28,+dc.value||1));this.render()}}}
     // Format-specific fields in back office
@@ -642,12 +649,54 @@ class LotteryPosPanel extends HTMLElement{
     <div class="row"><input class="d-f" data-k="qr_prefix" placeholder="Optional text before the ticket number inside the QR" value="${esc(d.qr_prefix)}" maxlength="40" style="flex:1"></div>
     <p class="note">Barcode scanners and 2D/QR scanners type the code into the scan box on the Sell screen. The ticket number is read from the end of the code, so a prefix is fine.</p>
     <div class="row"><button data-a="savedesign">Save ticket layout</button><button class="ghost" data-a="resetdesign">Reset</button><button class="ghost" data-a="testprint">Print test ticket</button></div></div>
-    <div class="card"><h3>Preview</h3><div id="prev" class="paper"></div></div>`}
-  sampleTicket(){const d=this.s.data,g=d.all_games,b=d.all_bet_types,gm=i=>g[i%g.length]?.id,bt=i=>b[i%b.length]?.key;
-    const lines=[{game:gm(0),bet_type:bt(0),number:"1234".slice(0,b[0]?.digits||4),amount:2.5,date:today()},{game:gm(1),bet_type:bt(2),number:"56".padEnd(b[2%b.length]?.digits||2,"7").slice(0,b[2%b.length]?.digits||2),amount:1,date:today()}];
+    <div class="card"><h3>Preview</h3>
+      <div class="row" style="margin-bottom:10px">
+        <label style="flex:1">Preview as game
+          <select id="preview-game">${(this.s.data.all_games||[]).map(g=>`<option value="${esc(g.id)}" ${(this.s.previewGame||(this.s.data.all_games[0]&&this.s.data.all_games[0].id))===g.id?"selected":""}>${esc(g.name)}${(g.format||"digit")!=="digit"?` (${g.format})`:""}</option>`).join("")}
+          </select>
+        </label>
+      </div>
+      <p class="note">Messages of the day are filtered by the selected game so you can check standard / dynamic / scheduled text per game.</p>
+      <div id="prev" class="paper"></div></div>`}
+  sampleTicket(){const d=this.s.data,games=d.all_games||[],bts=d.all_bet_types||[];
+    const gid=this.s.previewGame||games[0]?.id;
+    const game=games.find(g=>g.id===gid)||games[0];
+    if(!game)return {id:"PREVIEW",retailer_name:d.retailers[0]?.name||"Retailer",created:new Date().toISOString(),lines:[],total:0,promotions:[]};
+    const fmt=game.format||"digit";
+    let line;
+    if(fmt==="jackpot"){
+      const mc=+game.main_count||5,mm=+game.main_max||30;
+      const balls=Array.from({length:mc},(_,i)=>String(i+1).padStart(2,"0"));
+      const mega=game.mega_count?String(Math.min(7,+(game.mega_max||15))).padStart(2,"0"):"";
+      const prices=(game.fixed_prices&&game.fixed_prices.length)?game.fixed_prices:[2,3,4,5];
+      line={game:game.id,bet_type:"jackpot",number:balls.join("-")+(mega?"+"+mega:""),balls,mega,amount:+prices[0]||2,date:today(),format:"jackpot"};
+    }else if(fmt==="zodiac"){
+      const dig=+game.digits||2;
+      line={game:game.id,bet_type:"zodiac",number:"1".repeat(dig).slice(0,dig),symbols:["rat"],amount:1,date:today(),format:"zodiac"};
+    }else{
+      const allowed=game.bet_types?.length?bts.filter(b=>game.bet_types.includes(b.key)):bts.filter(b=>b.mode!=="zodiac"&&b.mode!=="jackpot");
+      const bt=allowed[0]||bts[0];
+      const dig=+(game.digits||bt?.digits||4);
+      line={game:game.id,bet_type:bt?.key||"4_cifra",number:("1234567890").slice(0,dig),amount:1,date:today(),format:"digit"};
+    }
     const promos=(d.promotions||[]).filter(p=>p.enabled!==false).slice(0,1).map(p=>({id:p.id,name:p.name,code:"1".repeat(p.code_digits||6).replace(/./g,(_,i)=>String((i*3+7)%10)),label:p.label,instruction:p.instruction,url:p.url,prize:p.prize||0}));
-    return {id:"261022000112345678",retailer_name:d.retailers[0]?.name||"Retailer",created:new Date(Date.now()-new Date().getTimezoneOffset()*6e4).toISOString(),lines,total:3.5,promotions:promos}}
-  refreshPreview(){const p=this.shadowRoot.querySelector("#prev");if(!p)return;const d=this.design();p.style.width=d.width+"mm";p.innerHTML=this.receiptInner(this.sampleTicket(),"TICKET",d)}
+    return {id:"261022000112345678",retailer_name:d.retailers[0]?.name||"Retailer",created:new Date(Date.now()-new Date().getTimezoneOffset()*6e4).toISOString(),lines:[line],total:line.amount,promotions:promos}}
+  refreshPreview(){const p=this.shadowRoot.querySelector("#prev");if(!p)return;
+    // live-read MOTD rows so preview updates before save
+    const d={...this.design()};
+    if(this.shadowRoot.querySelector(".tmsg-row")){
+      d.messages=[...this.shadowRoot.querySelectorAll(".tmsg-row")].map(row=>({
+        type:row.dataset.type||"standard",
+        text:row.querySelector(".tm-text")?.value||"",
+        enabled:!!row.querySelector(".tm-en")?.checked,
+        games:[...row.querySelectorAll(".tm-game:checked")].map(x=>x.value),
+        start_at:row.querySelector(".tm-start")?.value||"",
+        end_at:row.querySelector(".tm-end")?.value||""
+      })).filter(m=>m.text.trim());
+    }
+    const ticket=this.sampleTicket();
+    p.style.width=(d.width||72)+"mm";
+    p.innerHTML=this.receiptInner(ticket,"TICKET",d)}
   longDate(dt){const d=dt?new Date(dt):new Date();
     if(isNaN(d.getTime()))return"";
     return d.toLocaleDateString("en-US",{weekday:"long",year:"numeric",month:"long",day:"numeric"})}
