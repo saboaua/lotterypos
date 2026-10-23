@@ -329,6 +329,19 @@ class LotteryPosPanel extends HTMLElement{
   tickerHTML(){const t=this.s.data.settings.ticker;if(!t||!t.enabled||!t.text)return"";const w=t.text.length*18+1000,dur=Math.max(8,w/(30+t.speed*30));return `<div class="ticker"><div class="tk" style="color:${t.color};animation-duration:${dur.toFixed(1)}s">${esc(t.text)}</div></div>`}
 
 
+  sessionsOf(g){return (g&&g.sessions)||[]}
+  activeSession(){const g=this.primaryGame();const ss=this.sessionsOf(g);if(!ss.length)return null;
+    let id=this.s.session;if(!ss.find(x=>x.id===id)){id=ss[0].id;this.s.session=id}return ss.find(x=>x.id===id)||ss[0]}
+  sessionOpen(g,sess){const s=this.s,t=today();if(!sess)return false;if(s.date>t)return true;if(s.date<t)return false;
+    const n=new Date(),nm=n.getHours()*60+n.getMinutes();const [h,m]=(sess.cutoff||"23:59").split(":");return nm<(+h*60+ +m)}
+  sessionSelHTML(){const g=this.primaryGame();const ss=this.sessionsOf(g);if(!ss.length)return"";
+    const cur=this.activeSession();
+    return `<div class="row" style="margin:6px 0 2px"><span class="note">Draw session</span>
+      <div class="sess-sel">${ss.map(x=>{
+        const open=this.sessionOpen(g,x);const on=cur&&cur.id===x.id;
+        return `<button type="button" class="${on?"on":""} ${open?"":"closed"}" data-a="session" data-v="${esc(x.id)}" title="Draw ${x.draw_time} · cut ${x.cutoff}">${esc(x.label)}<small style="display:block;font-weight:600;opacity:.85;font-size:11px">${x.draw_time||""}</small></button>`;
+      }).join("")}</div></div>`}
+
   formatPanelHTML(){const s=this.s,g=this.primaryGame();if(!g)return"";
     const fmt=this.gameFormat(g);
     if(fmt==="whe"){
@@ -927,6 +940,8 @@ class LotteryPosPanel extends HTMLElement{
       case "zod":{const id=ds.v;s.allZodiac=false;s.symbols=s.symbols.includes(id)?s.symbols.filter(x=>x!==id):[...s.symbols,id];this.render();break}
       case "zodall":{s.allZodiac=true;s.symbols=this.zodiacList().map(z=>z.id);this.render();break}
       case "zodclear":{s.allZodiac=false;s.symbols=[];this.render();break}
+      case "session":{s.session=ds.v;this.render();break}
+      case "whe":{s.num=String(ds.v);s.field="amt";this.render();break}
       case "ball":{const g=this.primaryGame(),mc=+g.main_count||5,v=ds.v;
         if(s.balls.includes(v))s.balls=s.balls.filter(x=>x!==v);
         else if(s.balls.length<mc)s.balls=[...s.balls,v];
