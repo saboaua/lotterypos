@@ -41,8 +41,11 @@ async def async_setup_entry(hass, entry) -> bool:
     dom = hass.data.setdefault(DOMAIN, {})
     dom["store"] = store
     if not dom.get("registered"):
-        await hass.http.async_register_static_paths(
-            [StaticPathConfig(STATIC_URL, str(Path(__file__).parent / "frontend" / "lottery-panel.js"), False)])
+        frontend_dir = Path(__file__).parent / "frontend"
+        await hass.http.async_register_static_paths([
+            StaticPathConfig(STATIC_URL, str(frontend_dir / "lottery-panel.js"), False),
+            StaticPathConfig("/lottery_pos_static/check.html", str(frontend_dir / "check.html"), False),
+        ])
         api.async_register(hass)
         _register_services(hass)
         dom["registered"] = True

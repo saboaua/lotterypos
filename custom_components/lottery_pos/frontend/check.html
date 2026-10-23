@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Check your promotion code</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg0: #070b16;
+      --bg1: #0e1528;
+      --card: rgba(255, 255, 255, 0.06);
+      --card-border: rgba(255, 255, 255, 0.1);
+      --ink: #f4f6fb;
+      --mut: #93a0bf;
+      --pri: #7c6cff;
+      --pri2: #22d3ee;
+      --ok: #34d399;
+      --bad: #fb7185;
+      --warn: #fbbf24;
+      --glow: 0 0 80px rgba(124, 108, 255, 0.35);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { min-height: 100%; }
+    body {
+      font-family: Outfit, system-ui, sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(1200px 600px at 10% -10%, rgba(124, 108, 255, 0.25), transparent 55%),
+        radial-gradient(900px 500px at 100% 0%, rgba(34, 211, 238, 0.18), transparent 50%),
+        radial-gradient(700px 400px at 50% 110%, rgba(52, 211, 153, 0.12), transparent 50%),
+        linear-gradient(165deg, var(--bg0), var(--bg1));
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px 16px 48px;
+    }
+    .wrap {
+      width: min(440px, 100%);
+      position: relative;
+    }
+    .brand {
+      text-align: center;
+      margin-bottom: 28px;
+    }
+    .logo {
+      width: 64px; height: 64px;
+      border-radius: 20px;
+      margin: 0 auto 14px;
+      display: grid; place-items: center;
+      background: linear-gradient(135deg, var(--pri), var(--pri2));
+      box-shadow: var(--glow);
+      font-weight: 800; font-size: 22px; letter-spacing: -0.02em;
+    }
+    .brand h1 {
+      font-size: 1.55rem; font-weight: 700; letter-spacing: -0.03em;
+    }
+    .brand p {
+      color: var(--mut); margin-top: 6px; font-size: 0.95rem; line-height: 1.45;
+    }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--card-border);
+      border-radius: 24px;
+      padding: 28px 24px;
+      backdrop-filter: blur(18px);
+      box-shadow: 0 24px 60px rgba(0, 0, 0, 0.35);
+    }
+    label {
+      display: block;
+      font-size: 0.78rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--mut);
+      margin-bottom: 10px;
+      font-weight: 600;
+    }
+    .code-row {
+      display: flex;
+      gap: 10px;
+      align-items: stretch;
+    }
+    input[type="text"] {
+      flex: 1;
+      height: 56px;
+      border-radius: 16px;
+      border: 1px solid var(--card-border);
+      background: rgba(0, 0, 0, 0.35);
+      color: var(--ink);
+      font-family: inherit;
+      font-size: 1.35rem;
+      font-weight: 700;
+      letter-spacing: 0.28em;
+      text-align: center;
+      padding: 0 14px;
+      outline: none;
+      transition: border-color .2s, box-shadow .2s;
+    }
+    input[type="text"]:focus {
+      border-color: var(--pri);
+      box-shadow: 0 0 0 4px rgba(124, 108, 255, 0.25);
+    }
+    input[type="text"]::placeholder {
+      letter-spacing: 0.12em;
+      font-weight: 500;
+      color: #5b678a;
+    }
+    button.primary {
+      height: 56px;
+      min-width: 120px;
+      border: 0;
+      border-radius: 16px;
+      background: linear-gradient(135deg, var(--pri), #5b4dff 40%, var(--pri2));
+      color: #fff;
+      font-family: inherit;
+      font-weight: 700;
+      font-size: 1rem;
+      cursor: pointer;
+      padding: 0 20px;
+      box-shadow: 0 10px 28px rgba(124, 108, 255, 0.4);
+      transition: transform .15s, filter .15s;
+    }
+    button.primary:hover { filter: brightness(1.08); }
+    button.primary:active { transform: scale(0.98); }
+    button.primary:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+      filter: none;
+    }
+    .hint {
+      margin-top: 14px;
+      font-size: 0.85rem;
+      color: var(--mut);
+      text-align: center;
+      line-height: 1.4;
+    }
+    .result {
+      margin-top: 22px;
+      border-radius: 18px;
+      padding: 22px 18px;
+      text-align: center;
+      display: none;
+      animation: rise .35s ease;
+    }
+    .result.show { display: block; }
+    @keyframes rise {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: none; }
+    }
+    .result.won {
+      background: linear-gradient(160deg, rgba(52, 211, 153, 0.18), rgba(34, 211, 238, 0.08));
+      border: 1px solid rgba(52, 211, 153, 0.35);
+    }
+    .result.lost {
+      background: rgba(251, 113, 133, 0.1);
+      border: 1px solid rgba(251, 113, 133, 0.28);
+    }
+    .result.pending {
+      background: rgba(251, 191, 36, 0.1);
+      border: 1px solid rgba(251, 191, 36, 0.3);
+    }
+    .result.error {
+      background: rgba(148, 163, 184, 0.1);
+      border: 1px solid rgba(148, 163, 184, 0.25);
+    }
+    .emoji {
+      font-size: 2.4rem;
+      line-height: 1;
+      margin-bottom: 10px;
+    }
+    .result h2 {
+      font-size: 1.25rem;
+      font-weight: 700;
+      margin-bottom: 6px;
+    }
+    .result p {
+      color: var(--mut);
+      font-size: 0.95rem;
+      line-height: 1.45;
+    }
+    .prize-box {
+      margin-top: 16px;
+      padding: 16px;
+      border-radius: 14px;
+      background: rgba(0, 0, 0, 0.28);
+    }
+    .prize-box .plabel {
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--mut);
+      margin-bottom: 4px;
+    }
+    .prize-box .pamt {
+      font-size: 1.85rem;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      background: linear-gradient(90deg, var(--ok), var(--pri2));
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+    }
+    .meta {
+      margin-top: 12px;
+      font-size: 0.8rem;
+      color: var(--mut);
+    }
+    .footer {
+      margin-top: 28px;
+      text-align: center;
+      font-size: 0.78rem;
+      color: #5b678a;
+    }
+    .demo-bar {
+      margin-top: 16px;
+      padding: 12px 14px;
+      border-radius: 14px;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px dashed rgba(255, 255, 255, 0.12);
+      font-size: 0.8rem;
+      color: var(--mut);
+      line-height: 1.45;
+    }
+    .demo-bar button {
+      margin-top: 8px;
+      margin-right: 6px;
+      border: 0;
+      border-radius: 10px;
+      padding: 8px 12px;
+      background: rgba(255, 255, 255, 0.08);
+      color: var(--ink);
+      font-family: inherit;
+      font-size: 0.78rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .spinner {
+      width: 22px; height: 22px;
+      border: 2px solid rgba(255,255,255,.25);
+      border-top-color: #fff;
+      border-radius: 50%;
+      display: inline-block;
+      animation: spin .7s linear infinite;
+      vertical-align: middle;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="brand">
+      <div class="logo">SL</div>
+      <h1>Promotion check</h1>
+      <p>Enter the code printed on your ticket to see if you qualified for a prize.</p>
+    </div>
+
+    <div class="card">
+      <label for="code">Promotion code</label>
+      <div class="code-row">
+        <input id="code" type="text" inputmode="numeric" autocomplete="one-time-code"
+               maxlength="12" placeholder="000000" aria-label="Promotion code" />
+        <button class="primary" id="go" type="button">Check</button>
+      </div>
+      <p class="hint">Digits only · same number as under the dashed box on your ticket</p>
+
+      <div id="result" class="result" role="status" aria-live="polite"></div>
+
+      <div class="demo-bar" id="demo">
+        <strong style="color:var(--ink)">Demo mode</strong> — try sample outcomes without a live server:
+        <div>
+          <button type="button" data-demo="won">Sample win</button>
+          <button type="button" data-demo="lost">Sample no win</button>
+          <button type="button" data-demo="pending">Sample pending</button>
+        </div>
+      </div>
+    </div>
+
+    <p class="footer">Play responsibly · 18+</p>
+  </div>
+
+  <script>
+    const $ = (s) => document.querySelector(s);
+    const codeEl = $("#code");
+    const go = $("#go");
+    const result = $("#result");
+
+    // Optional: set window.LOTTERY_CHECK_URL to your Home Assistant REST proxy or leave empty
+    // to use demo responses. When served from HA static path, try websocket via parent if present.
+    const API = (window.LOTTERY_CHECK_URL || "").replace(/\/$/, "");
+
+    codeEl.addEventListener("input", () => {
+      codeEl.value = codeEl.value.replace(/\D/g, "").slice(0, 12);
+    });
+    codeEl.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") check();
+    });
+    go.addEventListener("click", check);
+
+    document.querySelectorAll("[data-demo]").forEach((btn) => {
+      btn.addEventListener("click", () => showDemo(btn.dataset.demo));
+    });
+
+    function show(status, data) {
+      result.className = "result show " + status;
+      if (status === "won") {
+        result.innerHTML = `
+          <div class="emoji">🎉</div>
+          <h2>${esc(data.message || "You won!")}</h2>
+          <p>${esc(data.promotion || "Promotion")}</p>
+          <div class="prize-box">
+            <div class="plabel">${esc(data.prize_label || "Prize")}</div>
+            <div class="pamt">${esc(data.currency || "")} ${fmt(data.prize_amount)}</div>
+          </div>
+          <p class="meta">Code ${esc(data.code)}</p>`;
+      } else if (status === "lost") {
+        result.innerHTML = `
+          <div class="emoji">🎫</div>
+          <h2>Not this time</h2>
+          <p>${esc(data.message || "This code did not win a prize.")}</p>
+          <p class="meta">Code ${esc(data.code)} · ${esc(data.promotion || "")}</p>`;
+      } else if (status === "pending") {
+        result.innerHTML = `
+          <div class="emoji">⏳</div>
+          <h2>You're in!</h2>
+          <p>${esc(data.message || "You qualified. Winners will be announced soon.")}</p>
+          <p class="meta">Code ${esc(data.code)} · ${esc(data.promotion || "")}</p>`;
+      } else {
+        result.innerHTML = `
+          <div class="emoji">🔎</div>
+          <h2>Could not verify</h2>
+          <p>${esc(data.message || "Check the code and try again.")}</p>`;
+      }
+    }
+
+    function showDemo(kind) {
+      const samples = {
+        won: {
+          message: "Congratulations! You won!",
+          promotion: "Buy 3 Plays Promo",
+          prize_label: "Cash prize",
+          prize_amount: 250,
+          currency: "AWG",
+          code: "482916",
+        },
+        lost: {
+          message: "This code did not win a prize. Thank you for playing!",
+          promotion: "Buy 3 Plays Promo",
+          code: "110294",
+        },
+        pending: {
+          message: "You qualified! Winners are not drawn yet — check back later.",
+          promotion: "Buy 3 Plays Promo",
+          code: "773501",
+        },
+      };
+      show(kind, samples[kind]);
+    }
+
+    async function check() {
+      const code = codeEl.value.trim();
+      if (!code) {
+        show("error", { message: "Enter the promotion code from your ticket." });
+        codeEl.focus();
+        return;
+      }
+      go.disabled = true;
+      go.innerHTML = '<span class="spinner"></span>';
+      try {
+        let data;
+        if (API) {
+          const r = await fetch(API + "/api/lottery_pos/check_promo?code=" + encodeURIComponent(code));
+          if (!r.ok) throw new Error((await r.json().catch(() => ({}))).message || "Request failed");
+          data = await r.json();
+        } else if (window.parent !== window && window.parent.hassConnection) {
+          // Running inside HA iframe with connection injected (optional)
+          throw new Error("Use demo buttons or set LOTTERY_CHECK_URL");
+        } else {
+          // Offline illustration: deterministic fake based on last digit
+          const last = code.slice(-1);
+          if (last === "0" || last === "5") {
+            data = {
+              status: "won",
+              message: "Congratulations! You won!",
+              promotion: "Demo promotion",
+              prize_label: "Cash prize",
+              prize_amount: 100 + (parseInt(code.slice(-2), 10) || 0),
+              currency: "AWG",
+              code,
+            };
+          } else if (last === "1" || last === "2") {
+            data = {
+              status: "pending",
+              message: "You qualified! Winners are not drawn yet — check back later.",
+              promotion: "Demo promotion",
+              code,
+            };
+          } else {
+            data = {
+              status: "lost",
+              message: "This code did not win a prize. Thank you for playing!",
+              promotion: "Demo promotion",
+              code,
+            };
+          }
+        }
+        show(data.status || "error", data);
+      } catch (e) {
+        show("error", { message: e.message || "Something went wrong" });
+      } finally {
+        go.disabled = false;
+        go.textContent = "Check";
+      }
+    }
+
+    function esc(s) {
+      return String(s ?? "").replace(/[&<>"']/g, (c) =>
+        ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+    }
+    function fmt(n) {
+      const x = Number(n);
+      return Number.isFinite(x) ? x.toFixed(2) : "0.00";
+    }
+
+    // Focus for tablet / POS kiosk use
+    setTimeout(() => codeEl.focus(), 200);
+  </script>
+</body>
+</html>

@@ -41,6 +41,7 @@ class LotteryStore:
         data["settings"].setdefault("ticker", {"enabled": True, "text": "Welcome! Play responsibly - good luck to all our players!", "speed": 5, "color": "#39ff14"})
         data["settings"]["ticket"] = {**TICKET_DEFAULTS, **data["settings"].get("ticket", {})}
         data.setdefault("promotions", copy.deepcopy(DEFAULT_PROMOTIONS))
+        data.setdefault("promo_codes", {})
         for g in data["games"]:
             g.setdefault("open_time", "00:00")
             g.setdefault("enabled", True)
@@ -62,6 +63,10 @@ class LotteryStore:
             p.setdefault("start_at", "")
             p.setdefault("end_at", "")
             p.setdefault("prize", 0.0)
+            p.setdefault("prizes", [])
+            # migrate single prize into prizes list if empty
+            if not p.get("prizes") and float(p.get("prize") or 0) > 0:
+                p["prizes"] = [{"label": "Winner prize", "amount": float(p["prize"]), "quantity": 1}]
             # ensure id is always a string (legacy numeric ids)
             if not isinstance(p.get("id"), str):
                 p["id"] = str(p["id"])
@@ -201,9 +206,17 @@ class LotteryStore:
                 if not ok:
                     continue
                 digits = max(4, min(10, int(p.get("code_digits", 6))))
-                code = f"{secrets.randbelow(10 ** digits):0{digits}d}"
+                # unique code not already used
+                codes = self.data.setdefault("promo_codes", {})
+                for _ in range(20):
+                    code = f"{secrets.randbelow(10 ** digits):0{digits}d}"
+                    if code not in codes:
+                        break
                 prize = float(p.get("prize") or 0)
-                awarded.append({
+                prizes = p.get("prizes") or []
+                if not prize and prizes:
+                    prize = max((float(x.get("amount") or 0) for x in prizes), default=0)
+                entry = {
                     "id": str(p["id"]),
                     "name": p.get("name", "Promotion"),
                     "code": code,
@@ -211,7 +224,18 @@ class LotteryStore:
                     "instruction": p.get("instruction", "Visit www.shocolottery.com and check if you have won"),
                     "url": p.get("url", "https://www.shocolottery.com"),
                     "prize": prize,
-                })
+                }
+                awarded.append(entry)
+                codes[code] = {
+                    "code": code,
+                    "promotion_id": str(p["id"]),
+                    "promotion_name": p.get("name", "Promotion"),
+                    "created": now.isoformat(),
+                    "status": "pending",  # pending | won | lost
+                    "prize_label": "",
+                    "prize_amount": 0.0,
+                    "claimed": False,
+                }
             except (TypeError, ValueError, KeyError):
                 continue
         return awarded
@@ -503,7 +527,29 @@ class LotteryStore:
         sa, ea = out.get("start_at") or "", out.get("end_at") or ""
         if sa and ea and sa > ea:
             raise LotteryError("Start must be before end")
-        if "prize" in f or existing is None:
+        if "prizes" in f or existing is None:
+            raw = f.get("prizes", out.get("prizes", [])) or []
+            if not isinstance(raw, list):
+                raise LotteryError("Prizes must be a list")
+            cleaned = []
+            for i, item in enumerate(raw):
+                if not isinstance(item, dict):
+                    raise LotteryError(f"Prize #{i+1} is invalid")
+                label = str(item.get("label") or f"Prize {i+1}").strip()[:60]
+                try:
+                    amount = float(item.get("amount", 0))
+                    qty = int(item.get("quantity", 1))
+                except (TypeError, ValueError) as err:
+                    raise LotteryError(f"Prize #{i+1} has invalid amount or quantity") from err
+                if amount < 0 or amount > 1_000_000:
+                    raise LotteryError(f"Prize #{i+1} amount must be 0–1000000")
+                if not 1 <= qty <= 10_000:
+                    raise LotteryError(f"Prize #{i+1} quantity must be 1–10000")
+                cleaned.append({"label": label, "amount": round(amount, 2), "quantity": qty})
+            out["prizes"] = cleaned
+            # keep legacy single prize as max amount for display
+            out["prize"] = max((x["amount"] for x in cleaned), default=0.0)
+        elif "prize" in f or existing is None:
             try:
                 prize = float(f.get("prize", out.get("prize", 0)))
             except (TypeError, ValueError) as err:
@@ -511,6 +557,8 @@ class LotteryStore:
             if prize < 0 or prize > 1_000_000:
                 raise LotteryError("Prize must be between 0 and 1000000")
             out["prize"] = round(prize, 2)
+            if not out.get("prizes") and prize > 0:
+                out["prizes"] = [{"label": "Winner prize", "amount": out["prize"], "quantity": 1}]
         return out
 
     def add_promotion(self, fields: dict) -> dict:
@@ -536,6 +584,123 @@ class LotteryStore:
         self._find_promo(pid)
         self.data["promotions"] = [x for x in self.data["promotions"] if x["id"] != pid]
         self._save()
+
+    def check_promo_code(self, code: str) -> dict:
+        """Public lookup: has this promotion code won a prize?"""
+        code = str(code or "").strip()
+        if not code or not code.isdigit():
+            raise LotteryError("Enter a valid promotion code")
+        codes = self.data.get("promo_codes") or {}
+        entry = codes.get(code)
+        if not entry:
+            # also accept codes still only on tickets (legacy)
+            for t in self.data.get("tickets", {}).values():
+                for pr in t.get("promotions") or []:
+                    if str(pr.get("code")) == code:
+                        entry = {
+                            "code": code,
+                            "promotion_id": str(pr.get("id", "")),
+                            "promotion_name": pr.get("name", "Promotion"),
+                            "status": "pending",
+                            "prize_label": "",
+                            "prize_amount": float(pr.get("prize") or 0),
+                            "claimed": False,
+                        }
+                        break
+                if entry:
+                    break
+        if not entry:
+            raise LotteryError("Code not found — check the number on your ticket")
+        status = entry.get("status") or "pending"
+        amount = float(entry.get("prize_amount") or 0)
+        label = entry.get("prize_label") or ""
+        cur = self.data.get("currency", "")
+        if status == "won" and amount > 0:
+            return {
+                "found": True,
+                "status": "won",
+                "code": code,
+                "promotion": entry.get("promotion_name", "Promotion"),
+                "message": "Congratulations! You won!",
+                "prize_label": label or "Prize",
+                "prize_amount": amount,
+                "currency": cur,
+                "claimed": bool(entry.get("claimed")),
+            }
+        if status == "lost":
+            return {
+                "found": True,
+                "status": "lost",
+                "code": code,
+                "promotion": entry.get("promotion_name", "Promotion"),
+                "message": "This code did not win a prize. Thank you for playing!",
+                "prize_label": "",
+                "prize_amount": 0,
+                "currency": cur,
+                "claimed": False,
+            }
+        # pending — draw not run yet, or qualified only
+        return {
+            "found": True,
+            "status": "pending",
+            "code": code,
+            "promotion": entry.get("promotion_name", "Promotion"),
+            "message": "You qualified! Winners are not drawn yet — check back later.",
+            "prize_label": "",
+            "prize_amount": 0,
+            "currency": cur,
+            "claimed": False,
+        }
+
+    def draw_promo_winners(self, pid: str) -> dict:
+        """Randomly assign prize slots to pending codes for a promotion."""
+        promo = self._find_promo(pid)
+        prizes = promo.get("prizes") or []
+        if not prizes and float(promo.get("prize") or 0) > 0:
+            prizes = [{"label": "Winner prize", "amount": float(promo["prize"]), "quantity": 1}]
+        if not prizes:
+            raise LotteryError("Add at least one prize before drawing winners")
+        codes = self.data.setdefault("promo_codes", {})
+        pending = [c for c in codes.values()
+                   if c.get("promotion_id") == str(pid) and c.get("status") == "pending"]
+        if not pending:
+            raise LotteryError("No pending codes for this promotion")
+        # Build slot list
+        slots = []
+        for pr in prizes:
+            for _ in range(int(pr.get("quantity") or 1)):
+                slots.append({"label": pr.get("label") or "Prize", "amount": float(pr.get("amount") or 0)})
+        # Shuffle and assign
+        import random
+        random.shuffle(pending)
+        random.shuffle(slots)
+        won, assigned = 0, 0
+        for i, entry in enumerate(pending):
+            if i < len(slots):
+                slot = slots[i]
+                entry["status"] = "won"
+                entry["prize_label"] = slot["label"]
+                entry["prize_amount"] = slot["amount"]
+                won += 1
+            else:
+                entry["status"] = "lost"
+                entry["prize_label"] = ""
+                entry["prize_amount"] = 0.0
+            assigned += 1
+        self._save()
+        return {"assigned": assigned, "winners": won, "prizes": len(slots), "pending_before": len(pending)}
+
+    def promo_codes_summary(self, pid: str | None = None) -> dict:
+        codes = list((self.data.get("promo_codes") or {}).values())
+        if pid:
+            codes = [c for c in codes if c.get("promotion_id") == str(pid)]
+        return {
+            "total": len(codes),
+            "pending": sum(1 for c in codes if c.get("status") == "pending"),
+            "won": sum(1 for c in codes if c.get("status") == "won"),
+            "lost": sum(1 for c in codes if c.get("status") == "lost"),
+        }
+
 
 
     def update_retailer(self, rid: str, name: str, commission: float, active: bool) -> dict:

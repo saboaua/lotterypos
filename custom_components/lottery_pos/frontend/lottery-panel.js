@@ -159,7 +159,7 @@ class LotteryPosPanel extends HTMLElement{
     this._posTerminal=location.hash.includes("pos-terminal");
     if(this._posTerminal){s.tab="sell";document.title=(document.title||"Lottery POS")+" — Terminal"}
     s.data=await this.ws("state");this._tm=setInterval(()=>this.tick(),30000);s.sel=[s.data.games[0]?.id];s.bt=s.data.bet_types[0]?.key;s.retailer=s.data.retailers[0]?.id;
-    this.shadowRoot.addEventListener("click",e=>{const el=e.target.closest("[data-a]");if(el)this.act(el.dataset.a,el.dataset)});
+    this.shadowRoot.addEventListener("click",e=>{const el=e.target.closest("[data-a]");if(!el)return;if(el.dataset.a==="rmprizerow"||el.dataset.a==="rmnprizerow"){const row=el.closest(".p-prize-row,.n-prize-row");if(row){const box=row.parentElement;if(box&&box.querySelectorAll(".p-prize-row,.n-prize-row").length>1)row.remove();else this.toast("Keep at least one prize row",1)}return}this.act(el.dataset.a,el.dataset)});
     this.render();
     if(this._posTerminal){try{await this.requestFullscreen?.()||this.shadowRoot.host?.requestFullscreen?.()}catch(e){}}}
   bt(){return this.s.data.all_bet_types.find(b=>b.key===this.s.bt)}
@@ -267,7 +267,7 @@ class LotteryPosPanel extends HTMLElement{
       const valLabel=trig==="min_amount"?`${cur} ${Number(p.trigger_value).toFixed(2)}`:p.trigger_value;
       return `<div class="promo-card" data-pid="${esc(p.id)}">
       <h4><ha-icon icon="mdi:gift-outline"></ha-icon> ${esc(p.name)} ${p.enabled!==false?`<span class="st paid">ON</span>`:`<span class="st unpaid">OFF</span>`}</h4>
-      <div class="meta">${trigLabel[trig]||trig}: <b>${valLabel}</b> · scope: ${esc(scopeTxt(p))} · ${p.code_digits||6}-digit code${Number(p.prize)>0?` · prize <b>${cur} ${Number(p.prize).toFixed(2)}</b>`:""}${(p.start_at||p.end_at)?` · ${p.start_at?esc(p.start_at):"…"} → ${p.end_at?esc(p.end_at):"…"}`:""}</div>
+      <div class="meta">${trigLabel[trig]||trig}: <b>${valLabel}</b> · scope: ${esc(scopeTxt(p))} · ${p.code_digits||6}-digit code${(p.prizes&&p.prizes.length)?` · ${p.prizes.map(x=>`${x.quantity||1}× ${esc(x.label||"prize")} (${cur} ${Number(x.amount||0).toFixed(2)})`).join(", ")}`:Number(p.prize)>0?` · prize <b>${cur} ${Number(p.prize).toFixed(2)}</b>`:""}${(p.start_at||p.end_at)?` · ${p.start_at?esc(p.start_at):"…"} → ${p.end_at?esc(p.end_at):"…"}`:""}</div>
       <div class="row"><label>Name <input class="p-name" value="${esc(p.name)}" style="width:180px"></label>
         <label>Trigger <select class="p-trig">
           <option value="min_plays" ${trig==="min_plays"?"selected":""}>Min. plays (lines)</option>
@@ -278,13 +278,24 @@ class LotteryPosPanel extends HTMLElement{
         <label>Digits <input class="p-dig" type="number" min="4" max="10" value="${p.code_digits||6}" style="width:70px"></label></div>
       <div class="row"><span class="note" style="width:100%">Games in this promo (none selected = entire ticket / all games):</span>${gameChecks(p.games||[],"p-game")}</div>
       <div class="row"><label>Start <input class="p-start" type="datetime-local" value="${esc((p.start_at||"").replace(" ","T").slice(0,16))}"></label>
-        <label>End <input class="p-end" type="datetime-local" value="${esc((p.end_at||"").replace(" ","T").slice(0,16))}"></label>
-        <label>Prize (${cur}) <input class="p-prize" type="number" step="any" min="0" value="${Number(p.prize)||0}" style="width:100px" title="Prize amount for winners who check the code on the website"></label></div>
+        <label>End <input class="p-end" type="datetime-local" value="${esc((p.end_at||"").replace(" ","T").slice(0,16))}"></label></div>
+      <div class="row" style="flex-direction:column;align-items:stretch;gap:8px">
+        <span class="note" style="width:100%"><b>Prizes for winners</b> — players who enter their code on the website see these if drawn as winners:</span>
+        <div class="p-prizes">${(p.prizes&&p.prizes.length?p.prizes:[{label:"Cash prize",amount:Number(p.prize)||0,quantity:1}]).map((pr,i)=>`
+          <div class="row p-prize-row" style="margin:0">
+            <input class="pp-label" placeholder="Prize name" value="${esc(pr.label||"")}" style="flex:1;min-width:120px">
+            <label>${cur} <input class="pp-amt" type="number" step="any" min="0" value="${Number(pr.amount)||0}" style="width:100px"></label>
+            <label>× <input class="pp-qty" type="number" min="1" max="10000" value="${Number(pr.quantity)||1}" style="width:70px" title="How many winners get this prize"></label>
+            <button type="button" class="ghost" data-a="rmprizerow" title="Remove">✕</button>
+          </div>`).join("")}</div>
+        <button type="button" class="ghost" data-a="addprizerow" data-v="${esc(p.id)}">+ Add prize tier</button>
+      </div>
       <div class="row"><input class="p-label" placeholder="Label on ticket" value="${esc(p.label||"")}" style="flex:1" maxlength="80"></div>
       <div class="row"><input class="p-instr" placeholder="Instruction under the code" value="${esc(p.instruction||"")}" style="flex:1" maxlength="200"></div>
       <div class="row"><input class="p-url" placeholder="URL" value="${esc(p.url||"")}" style="flex:1" maxlength="120">
         <label class="chip"><input type="checkbox" class="p-en" ${p.enabled!==false?"checked":""}> Enabled</label>
         <button data-a="savepromo" data-v="${esc(p.id)}">Save</button>
+        <button class="ghost" data-a="drawpromo" data-v="${esc(p.id)}">Draw winners</button>
         <button class="ghost" data-a="delpromo" data-v="${esc(p.id)}">Delete</button></div>
       <div class="note">Preview on ticket:</div>
       <div class="paper" style="width:58mm;margin:8px 0">${this.promoBlockHTML({label:p.label,code:String(Math.floor(Math.random()*1e6)).padStart(p.code_digits||6,"0").slice(-(p.code_digits||6)),instruction:p.instruction})}</div>
@@ -303,13 +314,24 @@ class LotteryPosPanel extends HTMLElement{
         <input id="pd" type="number" min="4" max="10" value="6" style="width:70px" title="Code digits"></div>
       <div class="row"><span class="note" style="width:100%">Games in this promo (none = all games on the ticket):</span>${gameChecks([],"n-game")}</div>
       <div class="row"><label>Start <input id="ps" type="datetime-local"></label>
-        <label>End <input id="pe" type="datetime-local"></label>
-        <label>Prize (${cur}) <input id="pp" type="number" step="any" min="0" value="0" style="width:100px" title="Prize for winners who check the code on the website"></label></div>
+        <label>End <input id="pe" type="datetime-local"></label></div>
+      <div class="row" style="flex-direction:column;align-items:stretch;gap:8px">
+        <span class="note" style="width:100%"><b>Prizes for winners</b> (shown when player checks code on the website):</span>
+        <div id="n-prizes">
+          <div class="row n-prize-row" style="margin:0">
+            <input class="np-label" placeholder="Prize name e.g. Cash prize" value="Cash prize" style="flex:1;min-width:120px">
+            <label>${cur} <input class="np-amt" type="number" step="any" min="0" value="100" style="width:100px"></label>
+            <label>× <input class="np-qty" type="number" min="1" max="10000" value="5" style="width:70px" title="Number of winners"></label>
+            <button type="button" class="ghost" data-a="rmnprizerow">✕</button>
+          </div>
+        </div>
+        <button type="button" class="ghost" data-a="addnprizerow">+ Add prize tier</button>
+      </div>
       <div class="row"><input id="pl" placeholder="Label on ticket" value="Qualified for promotion" style="flex:1" maxlength="80"></div>
       <div class="row"><input id="pi" placeholder="Instruction" value="Visit www.shocolottery.com and check if you have won" style="flex:1" maxlength="200"></div>
       <div class="row"><input id="pu" placeholder="URL" value="https://www.shocolottery.com" style="flex:1" maxlength="120">
         <button data-a="addpromo">Create promotion</button></div>
-      <p class="note">Leave start/end empty for no time limit. Prize is the amount shown when a player checks their promo code on the website.</p>
+      <p class="note">Leave start/end empty for no time limit. After tickets are sold, use <b>Draw winners</b> to randomly assign prize slots to codes. Players check at the promotion URL / check page.</p>
     </div>`}
   promoBlockHTML(p){return `<div class="promo-block" style="border:1.5px dashed #000;padding:6px 4px;margin:6px 0;text-align:center;color:#000;font-family:monospace">
       <div style="font-size:0.9em;text-transform:uppercase;letter-spacing:.04em">${esc(p.label||"Qualified for promotion")}</div>
@@ -441,15 +463,44 @@ class LotteryPosPanel extends HTMLElement{
       case "savedesign":{const r=await this.call("set_ticket_design",{design:this.design()});if(r){s.data=await this.ws("state");s.design=null;this.toast("Ticket layout saved");this.render()}break}
       case "resetdesign":s.design={...this.designDefaults()};this.render();break;
       case "testprint":{const d=this.design();this.print(this.docHTML(this.receiptInner(this.sampleTicket(),"TEST TICKET",d),d));break}
+      case "addnprizerow":{
+        const box=this.shadowRoot.querySelector("#n-prizes");if(!box)break;
+        const row=document.createElement("div");row.className="row n-prize-row";row.style.margin="0";
+        row.innerHTML=`<input class="np-label" placeholder="Prize name" value="Prize" style="flex:1;min-width:120px">
+          <label>${s.data.currency||""} <input class="np-amt" type="number" step="any" min="0" value="50" style="width:100px"></label>
+          <label>× <input class="np-qty" type="number" min="1" max="10000" value="1" style="width:70px"></label>
+          <button type="button" class="ghost" data-a="rmnprizerow">✕</button>`;
+        box.appendChild(row);break}
       case "addpromo":{const q=x=>this.shadowRoot.querySelector(x);
         const games=[...this.shadowRoot.querySelectorAll(".n-game:checked")].map(el=>el.value);
-        const r=await this.call("add_promotion",{name:q("#pn").value,trigger:q("#pt").value,trigger_value:+q("#pv").value,code_digits:+q("#pd").value,games,label:q("#pl").value,instruction:q("#pi").value,url:q("#pu").value,enabled:true,start_at:q("#ps").value,end_at:q("#pe").value,prize:+q("#pp").value||0});
+        const prizes=[...this.shadowRoot.querySelectorAll("#n-prizes .n-prize-row")].map(row=>({
+          label:row.querySelector(".np-label").value||"Prize",
+          amount:+row.querySelector(".np-amt").value||0,
+          quantity:+row.querySelector(".np-qty").value||1
+        })).filter(x=>x.amount>0&&x.quantity>0);
+        const r=await this.call("add_promotion",{name:q("#pn").value,trigger:q("#pt").value,trigger_value:+q("#pv").value,code_digits:+q("#pd").value,games,label:q("#pl").value,instruction:q("#pi").value,url:q("#pu").value,enabled:true,start_at:q("#ps").value,end_at:q("#pe").value,prizes,prize:prizes[0]?.amount||0});
         if(r){s.data=await this.ws("state");this.toast("Promotion created");this.render()}break}
+      case "addprizerow":{const c=this.shadowRoot.querySelector(`.promo-card[data-pid="${ds.v}"]`);if(!c)break;
+        const box=c.querySelector(".p-prizes");if(!box)break;
+        const row=document.createElement("div");row.className="row p-prize-row";row.style.margin="0";
+        row.innerHTML=`<input class="pp-label" placeholder="Prize name" value="Prize" style="flex:1;min-width:120px">
+          <label>${s.data.currency||""} <input class="pp-amt" type="number" step="any" min="0" value="50" style="width:100px"></label>
+          <label>× <input class="pp-qty" type="number" min="1" max="10000" value="1" style="width:70px"></label>
+          <button type="button" class="ghost" data-a="rmprizerow">✕</button>`;
+        box.appendChild(row);break}
       case "savepromo":{const c=this.shadowRoot.querySelector(`.promo-card[data-pid="${ds.v}"]`);if(!c)break;
         const v=sel=>c.querySelector(sel);
         const games=[...c.querySelectorAll(".p-game:checked")].map(el=>el.value);
-        const r=await this.call("update_promotion",{promotion_id:String(ds.v),name:v(".p-name").value,trigger:v(".p-trig").value,trigger_value:+v(".p-val").value,code_digits:+v(".p-dig").value,games,label:v(".p-label").value,instruction:v(".p-instr").value,url:v(".p-url").value,enabled:v(".p-en").checked,start_at:v(".p-start").value,end_at:v(".p-end").value,prize:+v(".p-prize").value||0});
+        const prizes=[...c.querySelectorAll(".p-prize-row")].map(row=>({
+          label:row.querySelector(".pp-label").value||"Prize",
+          amount:+row.querySelector(".pp-amt").value||0,
+          quantity:+row.querySelector(".pp-qty").value||1
+        })).filter(x=>x.amount>0&&x.quantity>0);
+        const r=await this.call("update_promotion",{promotion_id:String(ds.v),name:v(".p-name").value,trigger:v(".p-trig").value,trigger_value:+v(".p-val").value,code_digits:+v(".p-dig").value,games,label:v(".p-label").value,instruction:v(".p-instr").value,url:v(".p-url").value,enabled:v(".p-en").checked,start_at:v(".p-start").value,end_at:v(".p-end").value,prizes,prize:prizes[0]?.amount||0});
         if(r){s.data=await this.ws("state");this.toast("Promotion saved");this.render()}break}
+      case "drawpromo":{if(!await this.modal({title:"Draw winners?",text:"Randomly assign prize slots to pending codes for this promotion. Codes without a slot become non-winners.",ok:"Draw"}))break;
+        const r=await this.call("draw_promo_winners",{promotion_id:String(ds.v)});
+        if(r){this.toast(`Drawn ${r.winners} winner(s) from ${r.assigned} code(s)`);s.data=await this.ws("state");this.render()}break}
       case "delpromo":{if(!await this.modal({title:"Delete promotion",text:"Remove this promotion? Existing ticket codes stay valid.",ok:"Delete"}))break;
         const r=await this.call("delete_promotion",{promotion_id:String(ds.v)});
         if(r!==null){s.data=await this.ws("state");this.toast("Deleted");this.render()}break}

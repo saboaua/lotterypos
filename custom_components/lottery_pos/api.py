@@ -103,6 +103,12 @@ def _upd_r(s, m): return s.update_retailer(m["retailer_id"], m["name"], m["commi
 @_cmd("results_summary", {vol.Required("date_from"): str, vol.Required("date_to"): str}, admin=True)
 def _rsum(s, m): return s.results_summary(m["date_from"], m["date_to"])
 
+_PRIZE = vol.Schema({
+    vol.Required("label"): str,
+    vol.Required("amount"): vol.Coerce(float),
+    vol.Required("quantity"): vol.Coerce(int),
+})
+
 @_cmd("add_promotion", {
     vol.Required("name"): str,
     vol.Optional("trigger", default="min_plays"): str,
@@ -116,6 +122,7 @@ def _rsum(s, m): return s.results_summary(m["date_from"], m["date_to"])
     vol.Optional("start_at", default=""): str,
     vol.Optional("end_at", default=""): str,
     vol.Optional("prize", default=0): vol.Coerce(float),
+    vol.Optional("prizes", default=[]): [_PRIZE],
 }, admin=True)
 def _add_p(s, m):
     return s.add_promotion(m)
@@ -130,6 +137,7 @@ def _add_p(s, m):
     vol.Optional("start_at"): str,
     vol.Optional("end_at"): str,
     vol.Optional("prize"): vol.Coerce(float),
+    vol.Optional("prizes"): [_PRIZE],
 }, admin=True)
 def _upd_p(s, m):
     return s.update_promotion(m["promotion_id"], {k: v for k, v in m.items() if k not in ("promotion_id", "type")})
@@ -139,10 +147,23 @@ def _del_p(s, m):
     s.delete_promotion(m["promotion_id"])
     return {}
 
+# Public — players check their promotion code (no admin required)
+@_cmd("check_promo", {vol.Required("code"): str})
+def _chk(s, m):
+    return s.check_promo_code(m["code"])
+
+@_cmd("draw_promo_winners", {vol.Required("promotion_id"): str}, admin=True)
+def _draw_p(s, m):
+    return s.draw_promo_winners(m["promotion_id"])
+
+@_cmd("promo_codes_summary", {vol.Optional("promotion_id"): str}, admin=True)
+def _psum(s, m):
+    return s.promo_codes_summary(m.get("promotion_id"))
+
 COMMANDS = [
     _state, _sell, _ticket, _last, _cancel, _redeem, _draws, _report, _results,
     _add_r, _add_g, _brand, _ticker, _upd_g, _del_g, _upd_b, _design, _upd_r, _rsum,
-    _add_p, _upd_p, _del_p,
+    _add_p, _upd_p, _del_p, _chk, _draw_p, _psum,
 ]
 
 
