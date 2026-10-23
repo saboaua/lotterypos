@@ -15,7 +15,7 @@ from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
 
 from .const import (DEFAULT_BET_TYPES, DEFAULT_GAMES, DEFAULT_PROMOTIONS, DOMAIN,
-                    SIGNAL_UPDATE, STORAGE_KEY, STORAGE_VERSION, TICKET_DEFAULTS, ZODIAC_SYMBOLS)
+                    PLAY_WHE_MARKS, SIGNAL_UPDATE, STORAGE_KEY, STORAGE_VERSION, TICKET_DEFAULTS, ZODIAC_SYMBOLS)
 
 
 class LotteryError(ValueError):
@@ -49,15 +49,58 @@ class LotteryStore:
             g.setdefault("enabled", True)
             g.setdefault("bet_types", [])
             g.setdefault("draw_days", [])
-            g.setdefault("format", "digit")  # digit | zodiac | jackpot
-            g.setdefault("digits", 4)  # digit / zodiac number length
+            g.setdefault("format", "digit")  # digit | zodiac | jackpot | whe
+            g.setdefault("digits", 4)  # digit / zodiac / whe number length
             g.setdefault("main_count", 5)  # jackpot main balls to pick
             g.setdefault("main_max", 30)  # jackpot main pool 01..main_max
             g.setdefault("mega_count", 0)  # 0 or 1
             g.setdefault("mega_max", 15)
-            g.setdefault("symbols", [z["id"] for z in ZODIAC_SYMBOLS])  # zodiac ids enabled
+            g.setdefault("sessions", [])  # [{id,label,draw_time,cutoff}] multi-draw same day
+            west_ids = [z["id"] for z in ZODIAC_SYMBOLS]
+            legacy = {"rat","ox","tiger","rabbit","dragon","snake","horse","goat","monkey","rooster","dog","pig"}
+            if "symbols" not in g or not g["symbols"] or set(g["symbols"]) <= legacy:
+                g["symbols"] = list(west_ids)
+            else:
+                # keep only known western ids
+                g["symbols"] = [s for s in g["symbols"] if s in west_ids] or list(west_ids)
             if not isinstance(g.get("id"), str):
                 g["id"] = str(g["id"])
+        # Migrate legacy Philb-AM / Philb-PM into one Phillipsburg with sessions
+        ids = {g["id"] for g in data["games"]}
+        if "philb_am" in ids or "philb_pm" in ids:
+            if "philb" not in ids:
+                am = next((g for g in data["games"] if g["id"] == "philb_am"), None)
+                pm = next((g for g in data["games"] if g["id"] == "philb_pm"), None)
+                base = dict(am or pm or {})
+                base.update({
+                    "id": "philb",
+                    "name": "Phillipsburg",
+                    "color": (am or pm or {}).get("color", "#84cc16"),
+                    "draw_time": (am or {}).get("draw_time", "11:00"),
+                    "cutoff": (am or {}).get("cutoff", "10:45"),
+                    "format": (am or pm or {}).get("format", "digit"),
+                    "digits": (am or pm or {}).get("digits", 4),
+                    "sessions": [
+                        {"id": "am", "label": "AM",
+                         "draw_time": (am or {}).get("draw_time", "11:00"),
+                         "cutoff": (am or {}).get("cutoff", "10:45")},
+                        {"id": "pm", "label": "PM",
+                         "draw_time": (pm or {}).get("draw_time", "19:00"),
+                         "cutoff": (pm or {}).get("cutoff", "18:45")},
+                    ],
+                    "enabled": True,
+                })
+                data["games"].append(base)
+            # hide old split games (keep history)
+            for g in data["games"]:
+                if g["id"] in ("philb_am", "philb_pm"):
+                    g["enabled"] = False
+        # Ensure Play Whe default game exists
+        if "playwhe" not in {g["id"] for g in data["games"]}:
+            for dg in DEFAULT_GAMES:
+                if dg["id"] == "playwhe":
+                    data["games"].append(copy.deepcopy(dg))
+                    break
         for b in data["bet_types"]:
             b.setdefault("enabled", True)
         known_bt = {b["key"] for b in data["bet_types"]}
@@ -111,6 +154,30 @@ class LotteryStore:
                 return item
         raise LotteryError(f"Unknown {label}: {val}")
 
+
+    def _session(self, game: dict, session_id: str | None) -> dict | None:
+        """Return session dict for game, or None if game has no sessions."""
+        sessions = game.get("sessions") or []
+        if not sessions:
+            return None
+        if not session_id:
+            return sessions[0]
+        for s in sessions:
+            if s.get("id") == session_id:
+                return s
+        raise LotteryError(f"Unknown session '{session_id}' for {game.get('name')}")
+
+    def _result_key(self, game_id: str, d: str, session_id: str | None = None) -> str:
+        if session_id:
+            return f"{game_id}|{d}|{session_id}"
+        return f"{game_id}|{d}"
+
+    def _cutoff_for(self, game: dict, session_id: str | None = None) -> str:
+        sess = self._session(game, session_id) if (game.get("sessions") or []) else None
+        if sess and sess.get("cutoff"):
+            return sess["cutoff"]
+        return game.get("cutoff") or "23:59"
+
     def ticket(self, tid: str) -> dict:
         t = self.data["tickets"].get(str(tid).strip())
         if not t:
@@ -129,7 +196,8 @@ class LotteryStore:
         now = dt_util.now()
         today = now.date().isoformat()
         game = self._find("games", "id", line["game"], "game")
-        return line["date"] < today or (line["date"] == today and now.strftime("%H:%M") >= game["cutoff"])
+        cutoff = self._cutoff_for(game, line.get("session"))
+        return line["date"] < today or (line["date"] == today and now.strftime("%H:%M") >= cutoff)
 
     # ---------- selling ----------
     def sell(self, retailer_id: str, lines: list[dict]) -> dict:
@@ -223,6 +291,28 @@ class LotteryStore:
             max_s = float(game.get("max_stake") or bt.get("max_stake") or 1_000_000)
             if amt < min_s or amt > max_s:
                 raise LotteryError(f"Amount for {game['name']} must be {min_s:g}–{max_s:g}")
+            # Optional same-day session (AM / Midday / Evening …)
+            sessions = game.get("sessions") or []
+            sess_id = str(ln.get("session") or "").strip() or None
+            if sessions:
+                if not sess_id:
+                    # default to first still-open session for the date, else first
+                    now = dt_util.now()
+                    today = now.date().isoformat()
+                    chosen = None
+                    if ln.get("date") == today:
+                        hm = now.strftime("%H:%M")
+                        for s in sessions:
+                            if hm < (s.get("cutoff") or "23:59"):
+                                chosen = s
+                                break
+                    sess_id = (chosen or sessions[0])["id"]
+                self._session(game, sess_id)  # validates
+                line["session"] = sess_id
+                sess = self._session(game, sess_id)
+                line["session_label"] = sess.get("label") or sess_id
+            elif sess_id:
+                raise LotteryError(f"{game['name']} has no draw sessions")
             try:
                 multi = max(1, min(28, int(ln.get("draws") or ln.get("multi_draw") or 1)))
             except (TypeError, ValueError):
@@ -242,8 +332,10 @@ class LotteryStore:
                     raise LotteryError(f"{game['name']} is closed for {d}")
                 if d == dt_util.now().date().isoformat() and dt_util.now().strftime("%H:%M") < game.get("open_time", "00:00"):
                     raise LotteryError(f"{game['name']} opens at {game['open_time']}")
-                if f"{game['id']}|{d}" in self.data["results"]:
-                    raise LotteryError(f"{game['name']} {d} already drawn")
+                rkey = self._result_key(game["id"], d, line.get("session"))
+                if rkey in self.data["results"]:
+                    label = line.get("session_label") or line.get("session") or ""
+                    raise LotteryError(f"{game['name']} {d}{(' ' + label) if label else ''} already drawn")
                 one["draws"] = multi
                 clean.append(one)
             # progressive jackpot: contribute per play (once per multi-draw purchase unit)
@@ -417,6 +509,17 @@ class LotteryStore:
             if ln.get("number") == drawn_num and play_syms & drawn_syms:
                 return round(ln["amount"] * float(bt.get("multiplier", 1)), 2)
             return 0.0
+        if fmt == "whe":
+            if not nums:
+                return 0.0
+            try:
+                drawn = int(str(nums[0]).strip())
+                play = int(str(ln.get("number") or "0").strip())
+            except (TypeError, ValueError):
+                return 0.0
+            if drawn == play and 1 <= drawn <= 36:
+                return round(ln["amount"] * float(bt.get("multiplier", 24)), 2)
+            return 0.0
         if fmt == "jackpot":
             game = self._find("games", "id", ln["game"], "game")
             main_count = int(game.get("main_count") or 5)
@@ -471,32 +574,48 @@ class LotteryStore:
             hits = sum(1 for x in nums if x[-2:] == n)
         return round(ln["amount"] * bt["multiplier"] * int(hits), 2)
 
-    def set_results(self, game: str, d: str, numbers: list[str]) -> list[dict]:
+    def set_results(self, game: str, d: str, numbers: list[str], session: str | None = None) -> list[dict]:
         g = self._find("games", "id", game, "game")
         nums = [str(n).strip() for n in numbers if str(n).strip()]
         if not nums:
             raise LotteryError("Enter at least one result value")
+        sessions = g.get("sessions") or []
+        if sessions:
+            if not session:
+                session = sessions[0]["id"]
+            self._session(g, session)
+        elif session:
+            raise LotteryError(f"{g['name']} has no draw sessions")
         fmt = g.get("format", "digit")
         if fmt == "digit":
             dig = int(g.get("digits") or 4)
-            # allow classic 4-digit draws or game digit length
             if any(not n.isdigit() for n in nums):
                 raise LotteryError("Digit game results must be numbers")
         elif fmt == "zodiac":
             if len(nums) < 2:
                 raise LotteryError("Zodiac results: number then winning symbol id(s)")
+        elif fmt == "whe":
+            try:
+                n = int(nums[0])
+            except (TypeError, ValueError) as err:
+                raise LotteryError("Play Whe result must be a number 1–36") from err
+            if not 1 <= n <= 36:
+                raise LotteryError("Play Whe result must be 1–36")
+            nums = [str(n)]
         elif fmt == "jackpot":
             need = int(g.get("main_count") or 5) + (1 if int(g.get("mega_count") or 0) else 0)
             if len(nums) < need:
                 raise LotteryError(f"Jackpot results need {need} values (main balls + mega if any)")
-        self.data["results"][f"{game}|{d}"] = nums
+        rkey = self._result_key(game, d, session)
+        self.data["results"][rkey] = nums
         winners = []
         for t in self.data["tickets"].values():
             if t["status"] != "active":
                 continue
             touched = False
             for ln in t["lines"]:
-                if ln["game"] == game and ln["date"] == d and not ln["settled"]:
+                same_sess = (ln.get("session") or None) == (session or None)
+                if ln["game"] == game and ln["date"] == d and same_sess and not ln["settled"]:
                     ln["prize"], ln["settled"], touched = self._prize(ln, nums), True, True
             if touched and all(l["settled"] for l in t["lines"]):
                 t["prize"] = round(sum(l["prize"] for l in t["lines"]), 2)
@@ -504,7 +623,7 @@ class LotteryStore:
                 if t["prize"] > 0:
                     winners.append(t)
         self._save()
-        self.hass.bus.async_fire(f"{DOMAIN}_results", {"game": game, "date": d, "numbers": nums})
+        self.hass.bus.async_fire(f"{DOMAIN}_results", {"game": game, "date": d, "numbers": nums, "session": session})
         for t in winners:
             self.hass.bus.async_fire(f"{DOMAIN}_winner", {"ticket_id": t["id"], "retailer_id": t["retailer_id"], "prize": t["prize"]})
         return [self.public(t) for t in winners]
@@ -1292,8 +1411,8 @@ class LotteryStore:
             new["draw_days"] = days
         if "format" in f:
             fmt = str(f["format"])
-            if fmt not in ("digit", "zodiac", "jackpot"):
-                raise LotteryError("Format must be digit, zodiac or jackpot")
+            if fmt not in ("digit", "zodiac", "jackpot", "whe"):
+                raise LotteryError("Format must be digit, zodiac, jackpot or whe")
             new["format"] = fmt
         if "digits" in f:
             dig = int(f["digits"])
@@ -1318,6 +1437,28 @@ class LotteryStore:
             if bad:
                 raise LotteryError(f"Unknown symbols: {', '.join(bad)}")
             new["symbols"] = syms or [z["id"] for z in ZODIAC_SYMBOLS]
+        if "sessions" in f:
+            raw = f.get("sessions") or []
+            if not isinstance(raw, list):
+                raise LotteryError("sessions must be a list")
+            cleaned = []
+            seen_ids = set()
+            for i, s in enumerate(raw):
+                if not isinstance(s, dict):
+                    raise LotteryError(f"Session #{i+1} invalid")
+                sid = str(s.get("id") or "").strip().lower().replace(" ", "_")
+                if not sid or sid in seen_ids:
+                    raise LotteryError(f"Session #{i+1} needs a unique id")
+                seen_ids.add(sid)
+                label = str(s.get("label") or sid).strip()
+                dt = str(s.get("draw_time") or "12:00").strip()
+                cut = str(s.get("cutoff") or dt).strip()
+                cleaned.append({"id": sid, "label": label, "draw_time": dt, "cutoff": cut})
+            new["sessions"] = cleaned
+            if cleaned:
+                # keep top-level draw_time/cutoff as first session for compatibility
+                new["draw_time"] = cleaned[0]["draw_time"]
+                new["cutoff"] = cleaned[0]["cutoff"]
         for k in ("min_stake", "max_stake", "jackpot_min", "jackpot_current", "jackpot_contrib"):
             if k in f:
                 try:

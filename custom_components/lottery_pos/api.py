@@ -3,7 +3,7 @@ import asyncio
 import voluptuous as vol
 from homeassistant.components import websocket_api
 
-from .const import DOMAIN, ZODIAC_SYMBOLS
+from .const import DOMAIN, PLAY_WHE_MARKS, ZODIAC_SYMBOLS
 from .store import LotteryError
 
 # Flexible line: digit uses number; zodiac adds symbols; jackpot uses balls + mega
@@ -18,6 +18,7 @@ _LINE = vol.Schema({
     vol.Optional("mega", default=""): str,
     vol.Optional("draws", default=1): vol.Coerce(int),
     vol.Optional("multi_draw", default=1): vol.Coerce(int),
+    vol.Optional("session", default=""): str,
 }, extra=vol.ALLOW_EXTRA)
 
 
@@ -52,7 +53,8 @@ def _state(s, m):
             "currency": d["currency"], "settings": d["settings"],
             "retailers": [r for r in d["retailers"] if r.get("active", True)], "all_retailers": d["retailers"],
             "promotions": d.get("promotions", []), "summary": s.summary(),
-            "zodiac_symbols": ZODIAC_SYMBOLS}
+            "zodiac_symbols": ZODIAC_SYMBOLS,
+            "play_whe_marks": PLAY_WHE_MARKS}
 
 @_cmd("sell", {vol.Required("retailer_id"): str, vol.Required("lines"): [_LINE]})
 def _sell(s, m): return s.sell(m["retailer_id"], m["lines"])
@@ -89,8 +91,9 @@ async def _scrape(s, m, hass):
     url = m.get("url") or "https://indioslottery.com/"
     return await hass.async_add_executor_job(s.scrape_indios, url)
 
-@_cmd("set_results", {vol.Required("game"): str, vol.Required("date"): str, vol.Required("numbers"): [str]}, admin=True)
-def _results(s, m): return {"winners": s.set_results(m["game"], m["date"], m["numbers"])}
+@_cmd("set_results", {vol.Required("game"): str, vol.Required("date"): str, vol.Required("numbers"): [str],
+                    vol.Optional("session", default=""): str}, admin=True)
+def _results(s, m): return {"winners": s.set_results(m["game"], m["date"], m["numbers"], m.get("session") or None)}
 
 @_cmd("add_retailer", {
     vol.Required("name"): str,
@@ -139,6 +142,7 @@ def _ticker(s, m): return s.set_ticker(m["text"], m["enabled"], m["speed"], m["c
     vol.Optional("main_count"): vol.Coerce(int), vol.Optional("main_max"): vol.Coerce(int),
     vol.Optional("mega_count"): vol.Coerce(int), vol.Optional("mega_max"): vol.Coerce(int),
     vol.Optional("symbols"): [str],
+    vol.Optional("sessions"): list,
     vol.Optional("min_stake"): vol.Coerce(float), vol.Optional("max_stake"): vol.Coerce(float),
     vol.Optional("jackpot_min"): vol.Coerce(float), vol.Optional("jackpot_current"): vol.Coerce(float),
     vol.Optional("jackpot_contrib"): vol.Coerce(float),

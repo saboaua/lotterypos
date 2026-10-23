@@ -72,5 +72,12 @@ Enable a promotion in **Back office → Promotions**.
 
 On **Send & Print**, qualifying tickets get the promo block under the plays. Codes are unique per ticket and stored on the ticket record. A bad promotion definition never blocks a sale.
 
+## Play Whe & multi-session draws (v0.9.3)
+
+- **Play Whe** format: pick one mark **1–36**. The sell screen shows a grid of traditional marks (Centipede, Tiger, Queen, …). Payout uses the `play_whe` bet type (default **24×**).
+- **Sessions**: a single game can have several same-day draws (Morning / Midday / Afternoon / Evening, or AM / PM). Retailers pick the session on the sell screen instead of switching between separate games.
+- Default **Phillipsburg** is one game with AM + PM sessions (legacy `philb_am` / `philb_pm` are auto-hidden on upgrade).
+- Default **Play Whe** includes four daily sessions. Configure sessions under **Back office → Games**.
+
 ## Known limits (v0.7.2)
 Cut-off uses HA local time. A ticket becomes payable once all its draws are settled. Receipts print via the browser print dialog (use kiosk-printing for thermal printers). Data stored in `.storage/lottery_pos.data`; back it up. Promotion win checking is external (your website); this POS only issues the code on the ticket.

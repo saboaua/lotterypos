@@ -166,6 +166,15 @@ table{width:100%;border-collapse:collapse;font-size:13px}td,th{padding:9px 6px;b
 .draw-sel{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin:6px 0}
 .draw-sel button{min-width:40px;height:36px;border-radius:10px;background:var(--key);color:var(--ink);font-weight:700;border:2px solid var(--line)}
 .draw-sel button.on{background:linear-gradient(135deg,var(--pri),var(--pri2));color:#fff;border-color:transparent}
+.sess-sel{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0 4px}
+.sess-sel button{min-width:72px;height:42px;border-radius:12px;padding:0 14px;background:var(--key);color:var(--ink);font-weight:800;border:2px solid var(--line);font-size:14px}
+.sess-sel button.on{background:linear-gradient(135deg,var(--pri),var(--pri2));color:#fff;border-color:transparent;box-shadow:0 4px 12px color-mix(in srgb,var(--pri) 40%,transparent)}
+.sess-sel button.closed{opacity:.4;filter:grayscale(.6)}
+.whe-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(88px,1fr));gap:6px;margin:8px 0 4px;max-height:280px;overflow:auto}
+.wchip{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;min-height:56px;padding:6px 4px;border-radius:12px;border:2px solid var(--line);background:var(--key);cursor:pointer;font-weight:700;color:var(--ink)}
+.wchip .wn{font-size:18px;font-weight:900;line-height:1}
+.wchip .wl{font-size:10px;opacity:.85;text-align:center;line-height:1.15;font-weight:600}
+.wchip.on{background:linear-gradient(135deg,var(--pri),var(--pri2));color:#fff;border-color:transparent}
 .jprize-row{display:grid;grid-template-columns:70px 90px 110px 1fr 36px;gap:6px;align-items:center;margin-bottom:6px}
 .glist{display:flex;flex-direction:column;gap:10px}
 .glist-item{border:1px solid var(--line);border-radius:18px;background:var(--card);overflow:hidden;box-shadow:var(--sh);transition:box-shadow .18s,border-color .18s}
@@ -213,7 +222,7 @@ button{cursor:pointer;border:none;font-family:inherit}
 
 class LotteryPosPanel extends HTMLElement{
   constructor(){super();this.attachShadow({mode:"open"});
-    this.s={tab:"sell",sel:[],bt:"",date:today(),num:"",amt:"",field:"num",lines:[],retailer:"",data:null,scan:"",report:null,glogos:{},sub:"games",symbols:[],balls:[],mega:"",allZodiac:false,draws:1,editGame:null,previewGame:null};
+    this.s={tab:"sell",sel:[],bt:"",date:today(),num:"",amt:"",field:"num",lines:[],retailer:"",data:null,scan:"",report:null,glogos:{},sub:"games",symbols:[],balls:[],mega:"",allZodiac:false,draws:1,session:"",editGame:null,previewGame:null};
     this._kh=e=>this.onKey(e)}
   connectedCallback(){window.addEventListener("keydown",this._kh)}
   disconnectedCallback(){window.removeEventListener("keydown",this._kh);clearInterval(this._tm)}
@@ -229,14 +238,17 @@ class LotteryPosPanel extends HTMLElement{
   bt(){return this.s.data.all_bet_types.find(b=>b.key===this.s.bt)}
   primaryGame(){const s=this.s;return s.data.all_games.find(g=>g.id===s.sel[0])||s.data.games[0]}
   gameFormat(g){return (g&&g.format)||"digit"}
-  gameDigits(g){const f=this.gameFormat(g);if(f==="jackpot")return 0;return +(g?.digits||this.bt()?.digits||4)}
+  gameDigits(g){const f=this.gameFormat(g);if(f==="jackpot")return 0;if(f==="whe")return 2;return +(g?.digits||this.bt()?.digits||4)}
   zodiacList(){const all=this.s.data.zodiac_symbols||[];const g=this.primaryGame();const ids=g?.symbols?.length?g.symbols:all.map(z=>z.id);return all.filter(z=>ids.includes(z.id))}
   allowedBTs(){const s=this.s,d=s.data,sel=s.sel.map(id=>d.all_games.find(g=>g.id===id)).filter(Boolean);
-    if(!sel.length)return d.bet_types;
+    // Zodiac & jackpot are game formats, not general bet types
+    const digitOnly=b=>b.mode!=="zodiac"&&b.mode!=="jackpot"&&b.mode!=="whe"&&b.key!=="zodiac"&&b.key!=="jackpot"&&b.key!=="play_whe";
+    if(!sel.length)return d.bet_types.filter(digitOnly);
     const fmts=new Set(sel.map(g=>this.gameFormat(g)));
     if(fmts.has("jackpot"))return d.bet_types.filter(b=>b.key==="jackpot"||b.mode==="jackpot");
     if(fmts.has("zodiac"))return d.bet_types.filter(b=>b.key==="zodiac"||b.mode==="zodiac");
-    return d.bet_types.filter(b=>b.mode!=="zodiac"&&b.mode!=="jackpot"&&sel.every(g=>!g.bet_types?.length||g.bet_types.includes(b.key)))}
+    if(fmts.has("whe"))return d.bet_types.filter(b=>b.key==="play_whe"||b.mode==="whe");
+    return d.bet_types.filter(b=>digitOnly(b)&&sel.every(g=>!g.bet_types?.length||g.bet_types.includes(b.key)))}
   btl(k){return this.s.data.all_bet_types.find(b=>b.key===k)?.label||k}
   gn(k){return this.s.data.all_games.find(g=>g.id===k)?.name||k}
   toast(m,err){const t=document.createElement("div");t.className="toast"+(err?" err":"");t.textContent=(err?"⚠ ":"✓ ")+m;this.shadowRoot.append(t);setTimeout(()=>t.remove(),3200)}
@@ -244,7 +256,19 @@ class LotteryPosPanel extends HTMLElement{
     m.innerHTML=`<div class="mbox ${tone}"><h3>${title}</h3>${big?`<div class="big">${big}</div>`:""}<p>${text}</p>${input?`<input id="mi" placeholder="${input}" inputmode="numeric">`:""}<div class="mrow"><button class="ghost" data-x="0">Cancel</button><button class="primary" data-x="1">${ok}</button></div></div>`;
     const done=v=>{m.remove();res(v)};m.onclick=e=>{const x=e.target.dataset.x;if(x==="0"||e.target===m)done(null);else if(x==="1")done(input?m.querySelector("#mi").value.trim():true)};
     m.querySelector("#mi")?.addEventListener("keydown",e=>{if(e.key==="Enter")done(e.target.value.trim())});this.shadowRoot.append(m);setTimeout(()=>m.querySelector("#mi")?.focus(),60)})}
-  cd(g){const s=this.s,t=today(),wd=(new Date(s.date+"T12:00:00").getDay()+6)%7;if(g.draw_days?.length&&!g.draw_days.includes(wd))return{open:0,txt:`No draw ${DAYS[wd]}`};if(s.date>t)return{open:1,txt:"Open"};if(s.date<t)return{open:0,txt:"Closed"};const n=new Date(),nm=n.getHours()*60+n.getMinutes(),[oh,om]=(g.open_time||"00:00").split(":");if(nm<oh*60+ +om)return{open:0,txt:`Opens ${g.open_time}`};const [h,m]=g.cutoff.split(":"),d=h*60+ +m-(n.getHours()*60+n.getMinutes());return d<=0?{open:0,txt:"Closed"}:{open:1,txt:d>=60?`Closes in ${Math.floor(d/60)}h ${d%60}m`:`Closes in ${d}m`}}
+  cd(g){const s=this.s,t=today(),wd=(new Date(s.date+"T12:00:00").getDay()+6)%7;if(g.draw_days?.length&&!g.draw_days.includes(wd))return{open:0,txt:`No draw ${DAYS[wd]}`};if(s.date>t)return{open:1,txt:"Open"};if(s.date<t)return{open:0,txt:"Closed"};const n=new Date(),nm=n.getHours()*60+n.getMinutes(),[oh,om]=(g.open_time||"00:00").split(":");if(nm<oh*60+ +om)return{open:0,txt:`Opens ${g.open_time}`};
+    // When game has sessions: open if ANY session still open (so the game chip stays usable)
+    const ss=g.sessions||[];
+    let cutoff=g.cutoff;
+    if(ss.length){
+      const openSess=ss.filter(x=>{const [h,m]=(x.cutoff||"23:59").split(":");return nm<(+h*60+ +m)});
+      if(!openSess.length)return{open:0,txt:"Closed"};
+      // show nearest closing session
+      const next=openSess[0];cutoff=next.cutoff;
+      const [h,m]=cutoff.split(":"),d=h*60+ +m-nm;
+      return{open:1,txt:d>=60?`${next.label} · ${Math.floor(d/60)}h ${d%60}m`:`${next.label} · ${d}m`};
+    }
+    const [h,m]=cutoff.split(":"),d=h*60+ +m-nm;return d<=0?{open:0,txt:"Closed"}:{open:1,txt:d>=60?`Closes in ${Math.floor(d/60)}h ${d%60}m`:`Closes in ${d}m`}}
   tick(){const s=this.s;if(!s.data||s.tab!=="sell")return;let sig="";for(const g of s.data.games){const c=this.cd(g);sig+=c.open?1:0;const el=this.shadowRoot.querySelector(`[data-cd="${g.id}"]`);if(el)el.textContent=c.txt}if(sig!==this._sig)this.render()}
   async call(type,extra){try{return await this.ws(type,extra)}catch(e){this.toast(e.message||"Error",1);return null}}
 
@@ -307,6 +331,16 @@ class LotteryPosPanel extends HTMLElement{
 
   formatPanelHTML(){const s=this.s,g=this.primaryGame();if(!g)return"";
     const fmt=this.gameFormat(g);
+    if(fmt==="whe"){
+      const marks=s.data.play_whe_marks||[];
+      const cur=s.num?String(parseInt(s.num,10)||""):"";
+      return `<div class="fmt-panel"><h5>Play Whe · pick a mark 1–36</h5>
+        <div class="whe-grid">${marks.map(m=>{
+          const on=cur===(m.num+"");
+          return `<button type="button" class="wchip ${on?"on":""}" data-a="whe" data-v="${m.num}"><span class="wn">${String(m.num).padStart(2,"0")}</span><span class="wl">${esc(m.label)}</span></button>`;
+        }).join("")}</div>
+        <span class="note">${cur?`Selected: ${String(cur).padStart(2,"0")} ${esc((marks.find(m=>m.num==+cur)||{}).label||"")}`:"Tap a mark or type 1–36 on the keypad"}</span></div>`;
+    }
     if(fmt==="zodiac"){
       const zs=this.zodiacList();
       const allOn=s.allZodiac||(s.symbols.length&&s.symbols.length===zs.length);
@@ -335,7 +369,7 @@ class LotteryPosPanel extends HTMLElement{
     if(s.sel.length>1){
       const gs=s.sel.map(id=>d.all_games.find(g=>g.id===id)).filter(Boolean);
       const fmts=new Set(gs.map(g=>this.gameFormat(g)));
-      if(fmts.size>1||[...fmts][0]!=="digit") s.sel=[s.sel[0]];
+      if(fmts.size>1||![...fmts][0]||![...fmts][0].match(/^(digit)$/)) s.sel=[s.sel[0]];
       else {
         const digs=new Set(gs.map(g=>+(g.digits||4)));
         if(digs.size>1) s.sel=[s.sel[0]];
@@ -344,12 +378,13 @@ class LotteryPosPanel extends HTMLElement{
 
     this._sig=d.games.map(g=>this.cd(g).open?1:0).join("");
     const ok=this.allowedBTs();if(ok.length&&!ok.find(b=>b.key===s.bt)){s.bt=ok[0].key;s.num=s.num.slice(0,ok[0].digits||this.gameDigits(this.primaryGame()))}
-    const games=d.games.map(g=>{const c=this.cd(g);const fmt=this.gameFormat(g);const tag=fmt==="digit"?`${g.digits||4}d`:fmt;return `<button class="game ${s.sel.includes(g.id)?"on":""} ${c.open?"":"closed"}" style="--c:${g.color}" data-a="game" data-v="${g.id}"><span class="gi">${g.logo?`<img src="${g.logo}">`:esc(g.name[0])}</span><b>${esc(g.name)}</b><small class="fmt-tag">${tag}</small><small>Draw ${g.draw_time}${g.draw_days?.length&&g.draw_days.length<7?" · "+g.draw_days.map(i=>DAYS[i]).join(" "):""}</small><small data-cd="${g.id}">${c.txt}</small><span class="chk">✓</span></button>`}).join("");
+    const games=d.games.map(g=>{const c=this.cd(g);const fmt=this.gameFormat(g);const tag=fmt==="digit"?`${g.digits||4}d`:fmt==="whe"?"1–36":fmt;return `<button class="game ${s.sel.includes(g.id)?"on":""} ${c.open?"":"closed"}" style="--c:${g.color}" data-a="game" data-v="${g.id}"><span class="gi">${g.logo?`<img src="${g.logo}">`:esc(g.name[0])}</span><b>${esc(g.name)}</b><small class="fmt-tag">${tag}</small><small>Draw ${g.draw_time}${g.draw_days?.length&&g.draw_days.length<7?" · "+g.draw_days.map(i=>DAYS[i]).join(" "):""}</small><small data-cd="${g.id}">${c.txt}</small><span class="chk">✓</span></button>`}).join("");
     const acts=[["quick","mdi:dice-multiple","Quick pick"],["last","mdi:receipt-text-outline","Último"],["copy","mdi:content-copy","Copia"],["clear","mdi:delete-sweep-outline","Clear"],["cancel","mdi:cancel","Cancel"],["redeem","mdi:cash-check","Redeem"],["results","mdi:printer","Resultado"],["report1","mdi:file-chart-outline","Report"]];
     return `<div class="main"><section class="left card">
     <div class="games">${games}</div>
     <div class="ctl"><input type="date" id="date" value="${s.date}" min="${today()}"><div class="bts">${ok.map(b=>`<button class="bt ${b.key===s.bt?"on":""}" data-a="bt" data-v="${b.key}">${b.label}</button>`).join("")}</div></div>
     ${this.formatPanelHTML()}
+    ${this.sessionSelHTML()}
     <div class="row" style="margin:8px 0"><span class="note">Multi-draw</span>
       <div class="draw-sel">${[1,2,3,4,5,6,7,14].map(n=>`<button type="button" class="${(s.draws||1)===n?"on":""}" data-a="draws" data-v="${n}">${n}</button>`).join("")}
       <input type="number" id="draws-custom" min="1" max="28" value="${s.draws||1}" style="width:60px;height:36px;border-radius:10px;border:1px solid var(--line);padding:0 8px" title="Custom draws">
@@ -365,8 +400,15 @@ class LotteryPosPanel extends HTMLElement{
   async loadResults(){const s=this.s;s.rf=s.rf||ago(6);s.rt=s.rt||today();const r=await this.call("results_summary",{date_from:s.rf,date_to:s.rt});if(r)s.rs=r;this.render()}
   resultsHTML(){const s=this.s,d=s.data,cur=d.currency,r=s.rs,lab={redeemed:["paid","Paid"],won:["unpaid","Unpaid"],active:["pending","Pending"]};
     const badge=x=>`<span class="st ${(lab[x]||["pending",x])[0]}">${(lab[x]||["",x])[1]}</span>`;
-    const form=`<div class="card"><h3>Enter draw results</h3><div class="row"><select id="rg">${d.all_games.map(g=>`<option value="${g.id}">${esc(g.name)}</option>`).join("")}</select><input type="date" id="rd" value="${today()}"></div>
-      <div class="row"><input id="r1" maxlength="4" placeholder="1st" size="5" inputmode="numeric"><input id="r2" maxlength="4" placeholder="2nd" size="5" inputmode="numeric"><input id="r3" maxlength="4" placeholder="3rd" size="5" inputmode="numeric"></div><button data-a="saveres">Save &amp; settle</button></div>
+    const g0=d.all_games.find(g=>g.id===(s.rg||d.all_games[0]?.id))||d.all_games[0];
+    const sess=(g0&&g0.sessions)||[];
+    const form=`<div class="card"><h3>Enter draw results</h3>
+      <div class="row"><select id="rg">${d.all_games.map(g=>`<option value="${g.id}" ${g.id===(s.rg||"")?"selected":""}>${esc(g.name)}</option>`).join("")}</select>
+      <input type="date" id="rd" value="${s.rd||today()}">
+      ${sess.length?`<select id="rsess">${sess.map(x=>`<option value="${esc(x.id)}" ${x.id===(s.rsess||"")?"selected":""}>${esc(x.label)} (${x.draw_time})</option>`).join("")}</select>`:""}</div>
+      <div class="row"><input id="r1" maxlength="6" placeholder="${(g0&&g0.format)==="whe"?"Mark 1–36":"1st"}" size="6" inputmode="numeric"><input id="r2" maxlength="4" placeholder="2nd" size="5" inputmode="numeric"><input id="r3" maxlength="4" placeholder="3rd" size="5" inputmode="numeric"></div>
+      <button data-a="saveres">Save &amp; settle</button>
+      <p class="note">${(g0&&g0.format)==="whe"?"Play Whe: enter the winning mark (1–36).":(g0&&g0.format)==="zodiac"?"Zodiac: number then symbol id.":"Digit games: 1st / 2nd / 3rd prize."}</p></div>
       <div class="card"><h3>Import from indioslottery.com</h3>
         <p class="note">Scrapes the latest published winning numbers and settles matching local games (name match). Use to validate tickets against official results.</p>
         <div class="row"><button data-a="scrapejb">Fetch results from indioslottery.com</button></div>
@@ -397,12 +439,12 @@ class LotteryPosPanel extends HTMLElement{
   gamesCard(){const s=this.s,d=s.data,openId=s.editGame;
     const list=(d.all_games||[]).map(g=>{
       const fmt=g.format||"digit";
-      const tag=fmt==="digit"?`${g.digits||4}-digit`:fmt==="zodiac"?`zodiac ${g.digits||2}d`:`JP ${g.main_count||5}/${g.main_max||30}${g.mega_count?"+M":""}`;
+      const tag=fmt==="digit"?`${g.digits||4}-digit`:fmt==="zodiac"?`zodiac ${g.digits||2}d`:fmt==="whe"?`Play Whe 1–36`:`JP ${g.main_count||5}/${g.main_max||30}${g.mega_count?"+M":""}`;
       const open=openId===g.id;
       return `<div class="glist-item ${open?"open":""}">
         <button type="button" class="glist-head" data-a="editgame" data-v="${esc(g.id)}">
           <span class="dot" style="background:${g.color}"></span>
-          <span class="meta"><b>${esc(g.name)}</b><small>${tag} · draw ${g.draw_time} · cut ${g.cutoff}${fmt==="jackpot"?` · pool ${d.currency} ${Number(g.jackpot_current||g.jackpot_min||0).toFixed(0)}`:""}</small></span>
+          <span class="meta"><b>${esc(g.name)}</b><small>${tag} · ${(g.sessions||[]).length?((g.sessions||[]).map(x=>x.label).join("/")):("draw "+g.draw_time+" · cut "+g.cutoff)}${fmt==="jackpot"?` · pool ${d.currency} ${Number(g.jackpot_current||g.jackpot_min||0).toFixed(0)}`:""}</small></span>
           <ha-icon icon="${open?"mdi:chevron-up":"mdi:chevron-down"}"></ha-icon>
         </button>
         ${open?this.gameConfigHTML(g):""}
@@ -420,7 +462,7 @@ class LotteryPosPanel extends HTMLElement{
         <input class="jp-amt" type="number" step="any" min="0" value="${pr.amount||0}" style="width:100%" ${pr.prize_type==="jackpot"?"disabled":""}>
         <button type="button" class="ghost" data-a="rmjprize">✕</button>
       </div>`).join("");
-    const digitBTs=d.all_bet_types.filter(b=>b.mode!=="zodiac"&&b.mode!=="jackpot");
+    const digitBTs=d.all_bet_types.filter(b=>b.mode!=="zodiac"&&b.mode!=="jackpot"&&b.mode!=="whe");
     const allowed=g.bet_types||[];
     const prizeTable=digitBTs.map(b=>{
       const on=!allowed.length||allowed.includes(b.key);
@@ -440,6 +482,7 @@ class LotteryPosPanel extends HTMLElement{
     <div class="row"><label>Format <select class="f-fmt">
       <option value="digit" ${fmt==="digit"?"selected":""}>Digit number</option>
       <option value="zodiac" ${fmt==="zodiac"?"selected":""}>Zodiac + number</option>
+      <option value="whe" ${fmt==="whe"?"selected":""}>Play Whe (1–36 marks)</option>
       <option value="jackpot" ${fmt==="jackpot"?"selected":""}>Jackpot balls</option>
     </select></label>
     <label class="fmt-row fmt-digit fmt-zodiac" style="${fmt==="jackpot"?"display:none":""}">Min bet <input class="f-mins" type="number" step="any" min="0" value="${g.min_stake??0.5}" style="width:80px"></label>
@@ -467,11 +510,22 @@ class LotteryPosPanel extends HTMLElement{
       <button type="button" class="ghost" data-a="addjprize" data-v="${esc(g.id)}">+ Add prize tier</button>
     </div>
     <div class="row"><label>Opens <input type="time" class="f-open" value="${g.open_time||"00:00"}"></label><label>Cut-off <input type="time" class="f-cut" value="${g.cutoff}"></label><label>Draw <input type="time" class="f-draw" value="${g.draw_time}"></label></div>
+    <p class="note">For multiple same-day draws (AM / Midday / Evening), add sessions below. Cut-off &amp; draw above are used only when there are no sessions.</p>
+    <div class="sess-edit" data-gid="${esc(g.id)}">
+      ${(g.sessions||[]).map((x,i)=>`<div class="row sess-row" data-i="${i}">
+        <input class="s-id" placeholder="id" value="${esc(x.id)}" style="width:90px" title="Session id">
+        <input class="s-label" placeholder="Label" value="${esc(x.label)}" style="width:110px">
+        <label>Draw <input type="time" class="s-draw" value="${x.draw_time||"12:00"}"></label>
+        <label>Cut <input type="time" class="s-cut" value="${x.cutoff||"11:45"}"></label>
+        <button type="button" class="ghost" data-a="rmsess" data-v="${i}">✕</button>
+      </div>`).join("")||`<span class="note">No sessions — single draw per day</span>`}
+      <button type="button" class="ghost" data-a="addsess" data-v="${esc(g.id)}">+ Add session</button>
+    </div>
     <div class="row">${DAYS.map((n,i)=>`<label class="chip"><input type="checkbox" class="f-day" value="${i}" ${!g.draw_days?.length||g.draw_days.includes(i)?"checked":""}> ${n}</label>`).join("")}</div>
     <div class="row"><input type="file" class="f-file" data-id="${g.id}" accept="image/*" style="max-width:190px"><button class="ghost" data-a="glogoclear" data-v="${g.id}">Remove logo</button><span style="flex:1"></span><button data-a="savegame" data-v="${g.id}">Save game</button><button class="ghost dng" data-a="delgame" data-v="${g.id}">Delete</button></div>
   </div>`}
   btCard(){const d=this.s.data;return `<div class="card" style="grid-column:1/-1"><h3>Bet types — payout &amp; stake limits</h3>
-    <p class="note">Payout × is the prize multiplier per 1.00 stake (digit / zodiac). Min–max stake limits each play amount.</p>
+    <p class="note">Digit bet types only appear on the sell screen for digit games. Zodiac and Jackpot are game formats (not general bet types) and only apply when that format is selected.</p>
     <table><tr><th>Type</th><th>Label</th><th>Payout ×</th><th>Min bet</th><th>Max bet</th><th>On</th><th></th></tr>
     ${d.all_bet_types.map(b=>`<tr class="btr" data-k="${b.key}"><td>${b.digits?b.digits+" digits · ":""}${b.mode}</td>
       <td><input class="b-label" value="${esc(b.label)}" style="width:120px"></td>
@@ -677,7 +731,7 @@ class LotteryPosPanel extends HTMLElement{
       line={game:game.id,bet_type:"jackpot",number:balls.join("-")+(mega?"+"+mega:""),balls,mega,amount:+prices[0]||2,date:today(),format:"jackpot"};
     }else if(fmt==="zodiac"){
       const dig=+game.digits||2;
-      line={game:game.id,bet_type:"zodiac",number:"1".repeat(dig).slice(0,dig),symbols:["rat"],amount:1,date:today(),format:"zodiac"};
+      line={game:game.id,bet_type:"zodiac",number:"1".repeat(dig).slice(0,dig),symbols:["aries"],amount:1,date:today(),format:"zodiac"};
     }else{
       const allowed=game.bet_types?.length?bts.filter(b=>game.bet_types.includes(b.key)):bts.filter(b=>b.mode!=="zodiac"&&b.mode!=="jackpot");
       const bt=allowed[0]||bts[0];
@@ -782,8 +836,10 @@ class LotteryPosPanel extends HTMLElement{
     const col=k=>s.data.all_games.find(gg=>gg.id===k)?.color||"#64748b";
     const lineLabel=l=>{
       let base=l.number||"";
-      if(l.symbols&&l.symbols.length)base=l.number+" · "+l.symbols.join(",");
+      if(l.format==="whe"||l.mark)base=(l.number||"")+(l.mark?" "+l.mark:"");
+      else if(l.symbols&&l.symbols.length)base=l.number+" · "+l.symbols.join(",");
       else if(l.balls&&l.balls.length)base=l.balls.join("-")+(l.mega?"+"+l.mega:"");
+      if(l.session_label||l.session)base+=` · ${l.session_label||l.session}`;
       if((l.draws||1)>1)base+=` ×${l.draws} draws`;
       return base;
     };
@@ -820,7 +876,7 @@ class LotteryPosPanel extends HTMLElement{
       for(const g of games){
         const minS=+(g.min_stake??bt?.min_stake??0.5), maxS=+(g.max_stake??bt?.max_stake??100);
         if(amt<minS||amt>maxS)return this.toast(`${g.name}: amount must be ${minS}–${maxS}`,1);
-        made.push({game:g.id,bet_type:bt.key,number:s.num,amount:amt,date:s.date,format:"digit",draws});
+        const ln={game:g.id,bet_type:bt.key,number:s.num,amount:amt,date:s.date,format:"digit",draws};if((g.sessions||[]).length){const ss=this.activeSession();if(!ss)return this.toast("Select a draw session",1);if(!this.sessionOpen(g,ss)&&s.date===today())return this.toast(`${ss.label} is closed`,1);ln.session=ss.id;ln.session_label=ss.label}made.push(ln);
       }
       if(s.editIdx!=null){
         // edit replaces the one line; multi-add not used while editing
@@ -837,8 +893,13 @@ class LotteryPosPanel extends HTMLElement{
     const dig=this.gameDigits(g);
     const minS=+(g.min_stake??bt?.min_stake??0.5), maxS=+(g.max_stake??bt?.max_stake??100);
     if(amt<minS||amt>maxS)return this.toast(`Amount must be ${minS}–${maxS}`,1);
-    let line={game:g.id,bet_type:bt?.key||(fmt==="jackpot"?"jackpot":fmt==="zodiac"?"zodiac":""),amount:amt,date:s.date,format:fmt,draws};
-    if(fmt==="zodiac"){
+    let line={game:g.id,bet_type:bt?.key||(fmt==="jackpot"?"jackpot":fmt==="zodiac"?"zodiac":fmt==="whe"?"play_whe":""),amount:amt,date:s.date,format:fmt,draws};if((g.sessions||[]).length){const ss=this.activeSession();if(!ss)return this.toast("Select a draw session",1);if(!this.sessionOpen(g,ss)&&s.date===today())return this.toast(`${ss.label} is closed`,1);line.session=ss.id;line.session_label=ss.label}
+    if(fmt==="whe"){
+      const n=parseInt(s.num,10);
+      if(!(n>=1&&n<=36))return this.toast("Pick a mark 1–36",1);
+      line.bet_type="play_whe";line.number=String(n).padStart(2,"0");
+      const mk=(s.data.play_whe_marks||[]).find(m=>m.num===n);line.mark=mk?mk.label:"";
+    }else if(fmt==="zodiac"){
       if(s.num.length!==dig)return this.toast(`Needs ${dig}-digit number`,1);
       const syms=s.allZodiac?this.zodiacList().map(z=>z.id):(s.symbols||[]);
       if(!syms.length)return this.toast("Select zodiac symbols or All",1);
@@ -909,11 +970,16 @@ class LotteryPosPanel extends HTMLElement{
           if(!s.sel.length){/* allow empty */}
           else {s.field="num";const ok=this.allowedBTs();if(ok.length&&!ok.find(b=>b.key===s.bt))s.bt=ok[0].key}
         } else {
-          // Jackpot / zodiac: exclusive single select
+          // Jackpot / zodiac / whe: exclusive single select
           s.sel=[ds.v];
           s.symbols=[];s.balls=[];s.mega="";s.allZodiac=false;s.num="";
           s.field=fmt==="jackpot"?"amt":"num";
           const ok=this.allowedBTs();if(ok.length)s.bt=ok[0].key;
+        }
+        // Pick default session for the selected primary game
+        {const pg=s.data.all_games.find(g=>g.id===s.sel[0]);const ss=(pg&&pg.sessions)||[];
+          if(ss.length){const open=ss.find(x=>this.sessionOpen(pg,x));s.session=(open||ss[0]).id}
+          else s.session="";
         }
         this.render();break}
       case "bt":s.bt=ds.v;s.num=s.num.slice(0,this.bt().digits);s.field="num";this.render();break;
@@ -929,6 +995,7 @@ class LotteryPosPanel extends HTMLElement{
           const prices=(g.fixed_prices&&g.fixed_prices.length)?g.fixed_prices.map(Number):[2,3,4,5];
           s.amt=String(prices[Math.floor(Math.random()*prices.length)]);
           s.field="amt";if(s.fresh)s.fresh.amt=false;this.render();break}
+        if(fmt==="whe"){s.num=String(1+Math.floor(Math.random()*36));s.field="amt";this.render();break}
         if(fmt==="zodiac"){const dig=this.gameDigits(g);s.num=Array.from({length:dig},()=>Math.floor(Math.random()*10)).join("");
           s.symbols=[this.zodiacList()[Math.floor(Math.random()*this.zodiacList().length)].id];s.allZodiac=false;s.field="amt";this.render();break}
         const n=this.gameDigits(g)||this.bt()?.digits||4;s.num=Array.from({length:n},()=>Math.floor(Math.random()*10)).join("");s.field="amt";this.paint();break}
@@ -946,6 +1013,18 @@ class LotteryPosPanel extends HTMLElement{
       case "redeem":{const id=await this.modal({title:"Pay winner",input:"Scan or type ticket number",ok:"Check ticket"});if(id)this.scanned(id);break}
       case "results":{const r=await this.call("draw_results",{date:s.date});if(r)this.print(`<html><body style="font:13px monospace;width:72mm"><h3>RESULTADO ${s.date}</h3>${r.map(x=>`<p><b>${x.game}</b><br>${x.numbers.join(" - ")}</p>`).join("")||"No results yet"}</body></html>`);break}
       case "report1":{const t=today(),r=await this.call("report",{date_from:t,date_to:t});if(r)this.print(this.reportHTML(r));break}
+      case "addsess":{
+        const g=s.data.all_games.find(x=>x.id===ds.v);if(!g)break;
+        g.sessions=g.sessions||[];
+        const n=g.sessions.length+1;
+        g.sessions.push({id:"s"+n,label:"Session "+n,draw_time:"12:00",cutoff:"11:45"});
+        s.editGame=g.id;this.render();break}
+      case "rmsess":{
+        const card=this.shadowRoot.querySelector(".gcard");
+        const gid=card?.getAttribute("data-id");
+        const g=s.data.all_games.find(x=>x.id===gid);if(!g)break;
+        g.sessions=(g.sessions||[]).filter((_,i)=>i!==+ds.v);
+        s.editGame=gid;this.render();break}
       case "savegame":{const c=this.shadowRoot.querySelector(`.gcard[data-id="${ds.v}"]`);if(!c)break;
         const v=x=>c.querySelector(x);
         const all=[...c.querySelectorAll(".f-bt")],pick=all.filter(i=>i.checked).map(i=>i.value);
@@ -953,11 +1032,20 @@ class LotteryPosPanel extends HTMLElement{
         if(!days.length)return this.toast("Pick at least one draw day",1);
         if(!v(".f-name")?.value?.trim())return this.toast("Game name required",1);
         const fmtSel=v(".f-fmt")?.value||"digit";
+        const sessions=[...c.querySelectorAll(".sess-row")].map(row=>{
+          const id=(row.querySelector(".s-id")?.value||"").trim().toLowerCase().replace(/\s+/g,"_");
+          const label=(row.querySelector(".s-label")?.value||id).trim();
+          const draw_time=row.querySelector(".s-draw")?.value||"12:00";
+          const cutoff=row.querySelector(".s-cut")?.value||draw_time;
+          return id?{id,label,draw_time,cutoff}:null;
+        }).filter(Boolean);
         const msg={game_id:String(ds.v),name:v(".f-name").value,color:v(".f-color").value,enabled:!!v(".f-en")?.checked,
           open_time:v(".f-open")?.value||"00:00",cutoff:v(".f-cut")?.value||"12:45",draw_time:v(".f-draw")?.value||"13:00",
           bet_types:pick.length===all.length||!pick.length?[]:pick,draw_days:days.length===7?[]:days,
-          format:fmtSel,digits:+(v(".f-digits")?.value||4),
-          min_stake:+(v(".f-mins")?.value||0.5),max_stake:+(v(".f-maxs")?.value||100)};
+          format:fmtSel,digits:fmtSel==="whe"?2:+(v(".f-digits")?.value||4),
+          min_stake:+(v(".f-mins")?.value||0.5),max_stake:+(v(".f-maxs")?.value||100),
+          sessions};
+        if(fmtSel==="whe"){msg.bet_types=["play_whe"];msg.digits=2}
         if(fmtSel==="jackpot"){
           const mc=+(v(".f-mc")?.value||5);
           msg.main_count=mc;msg.main_max=+(v(".f-mm")?.value||30);
@@ -992,7 +1080,7 @@ class LotteryPosPanel extends HTMLElement{
       case "saveticker":{const q=x=>this.shadowRoot.querySelector(x);if(await this.call("set_ticker",{text:q("#tt").value,enabled:q("#te").checked,speed:+q("#ts").value,color:q("#tc").value})){s.data=await this.ws("state");this.toast("Message saved");this.render()}break}
       case "clearlogo":s.nameDraft=this.shadowRoot.querySelector("#bn")?.value;s.logoDraft="";this.render();break;
       case "savebrand":{const q=x=>this.shadowRoot.querySelector(x).value;const logo=s.logoDraft!==undefined?s.logoDraft:s.data.settings.logo;if(await this.call("set_branding",{name:q("#bn"),logo})){s.data=await this.ws("state");s.logoDraft=undefined;s.nameDraft=undefined;this.toast("Branding saved");this.render()}break}
-      case "saveres":{const q=x=>this.shadowRoot.querySelector(x).value;const dt=q("#rd"),r=await this.call("set_results",{game:q("#rg"),date:dt,numbers:[q("#r1"),q("#r2"),q("#r3")].filter(Boolean)});if(r){this.toast(`Settled - ${r.winners.length} winning ticket(s)`);s.rf=!s.rf||dt<s.rf?dt:s.rf;s.rt=!s.rt||dt>s.rt?dt:s.rt;await this.loadResults()}break}
+      case "saveres":{const q=x=>{const el=this.shadowRoot.querySelector(x);return el?el.value:""};const dt=q("#rd");const sessEl=this.shadowRoot.querySelector("#rsess");const payload={game:q("#rg"),date:dt,numbers:[q("#r1"),q("#r2"),q("#r3")].filter(Boolean)};if(sessEl&&sessEl.value)payload.session=sessEl.value;const r=await this.call("set_results",payload);if(r){this.toast(`Settled - ${r.winners.length} winning ticket(s)`);s.rf=!s.rf||dt<s.rf?dt:s.rf;s.rt=!s.rt||dt>s.rt?dt:s.rt;await this.loadResults()}break}
       case "runreport":case "printreport":{const q=x=>this.shadowRoot.querySelector(x).value;s.rpf=q("#f");s.rpt=q("#t");const r=await this.call("report",{date_from:s.rpf,date_to:s.rpt});if(!r)break;s.report=r;if(a==="printreport")this.print(this.reportHTML(r));else this.render();break}
       case "csv":{const r=s.report;if(!r)return this.toast("Run the report first",1);const L=[["Number","Retailer","Tickets","Plays","Sales","Sell commission","Redeem commission","Total commission","Prizes","Paid","Unpaid","Net"],...r.rows.map(x=>[x.number||"",x.retailer,x.tickets,x.lines,x.sales,x.commission_sell??x.commission,x.commission_redeem||0,x.commission,x.prizes,x.paid,x.unpaid,x.net]),[],["Game","Tickets","Sales","Prizes","Net"],...r.games.map(x=>[x.game,x.tickets,x.sales,x.prizes,x.net]),[],["Totals"],...Object.entries(r.totals)];const csv=L.map(row=>row.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(",")).join("\n"),el=document.createElement("a");el.href=URL.createObjectURL(new Blob([csv],{type:"text/csv"}));el.download=`lottery-report-${r.from}_${r.to}.csv`;el.click();break}
       case "sub":s.sub=ds.v;if(ds.v==="results"&&!s.rs)await this.loadResults();else this.render();break;
