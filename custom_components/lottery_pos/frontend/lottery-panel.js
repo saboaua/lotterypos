@@ -57,15 +57,15 @@ const DAYS=["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
 const PRESETS=[".25",".50",".75","1","2","5","10","20"];
 
 const CSS=`
-:host{--bg:#f2f4fa;--card:#fff;--ink:#0f172a;--mut:#64748b;--line:#e4e8f2;--pri:#4f46e5;--pri2:#7c3aed;--ok:#16a34a;--bad:#e11d48;--key:#f0f3fa;--nav:#0b1020;--sh:0 10px 30px #1e293b14;display:block;height:100%;background:var(--bg);color:var(--ink);font-family:Inter,system-ui,Roboto,sans-serif}
-:host(.dark){--bg:#0a0f1e;--card:#131a2e;--ink:#e8ecf8;--mut:#8b97b5;--line:#232c47;--key:#1b2440;--nav:#060a14;--sh:0 10px 30px #0007}
+:host{--bg:#f0f2f8;--card:#ffffff;--ink:#0b1220;--mut:#64748b;--line:#e2e8f0;--pri:#6366f1;--pri2:#8b5cf6;--ok:#10b981;--bad:#f43f5e;--key:#f8fafc;--nav:#0b1020;--sh:0 8px 28px rgba(15,23,42,.08);--radius:18px;display:block;height:100%;background:var(--bg);color:var(--ink);font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;letter-spacing:-0.01em}
+:host(.dark){--bg:#080c18;--card:#121a2e;--ink:#eef2ff;--mut:#94a3b8;--line:#1e293b;--key:#0f172a;--nav:#050814;--sh:0 12px 32px rgba(0,0,0,.45)}
 *{box-sizing:border-box}button,select,input{font:inherit;color:inherit}
 button{border:0;border-radius:14px;padding:10px 14px;background:var(--key);font-weight:600;cursor:pointer;transition:transform .08s,box-shadow .15s,background .15s}button:active{transform:scale(.96)}
 .shell{display:flex;height:100%}.content{flex:1;display:flex;flex-direction:column;min-width:0}
-.nav{width:84px;background:var(--nav);display:flex;flex-direction:column;align-items:center;padding:12px 6px;gap:8px}
-.nav button{width:70px;background:transparent;color:#7d89a8;display:flex;flex-direction:column;align-items:center;gap:3px;font-size:11px;padding:10px 2px;border-radius:16px}
-.nav button.on{background:linear-gradient(135deg,var(--pri),var(--pri2));color:#fff;box-shadow:0 6px 18px #4f46e566}.nav ha-icon{--mdc-icon-size:26px}
-.logo{width:60px;height:60px;border-radius:18px;background:#1b2440;color:#fff;font-weight:800;font-size:20px;display:grid;place-items:center;overflow:hidden;margin-bottom:10px}.logo img{max-width:100%;max-height:100%}
+.nav{width:88px;background:linear-gradient(180deg,#0b1020 0%,#121a33 100%);display:flex;flex-direction:column;align-items:center;padding:14px 8px;gap:8px;border-right:1px solid rgba(255,255,255,.04)}
+.nav button{width:72px;background:transparent;color:#8b97b5;display:flex;flex-direction:column;align-items:center;gap:4px;font-size:11px;font-weight:600;padding:12px 4px;border-radius:16px;transition:background .15s,color .15s,transform .12s}
+.nav button:hover{background:rgba(255,255,255,.06);color:#c7d2fe}.nav button.on{background:linear-gradient(135deg,var(--pri),var(--pri2));color:#fff;box-shadow:0 8px 22px rgba(99,102,241,.45)}.nav ha-icon{--mdc-icon-size:26px}
+.logo{width:60px;height:60px;border-radius:18px;background:linear-gradient(145deg,#1e293b,#0f172a);color:#fff;font-weight:800;font-size:18px;display:grid;place-items:center;overflow:hidden;margin-bottom:12px;box-shadow:0 8px 20px rgba(0,0,0,.35);border:1px solid rgba(255,255,255,.08)}.logo img{max-width:100%;max-height:100%}
 .top{display:flex;gap:10px;align-items:center;padding:12px 16px;flex-wrap:wrap}
 .brand{font-weight:800;font-size:22px;letter-spacing:-.5px;white-space:nowrap}
 .kpi{background:var(--card);border-radius:14px;padding:6px 14px;box-shadow:var(--sh);line-height:1.15}.kpi span{display:block;font-size:11px;color:var(--mut);text-transform:uppercase;letter-spacing:.6px}.kpi b{font-size:17px}
@@ -140,9 +140,23 @@ table{width:100%;border-collapse:collapse;font-size:13px}td,th{padding:9px 6px;b
 .promo-block .plabel{font-size:0.9em;text-transform:uppercase;letter-spacing:.04em}
 .promo-block .pcode{font-size:1.55em;font-weight:900;letter-spacing:.18em;margin:4px 0}
 .promo-block .pinstr{font-size:0.82em;line-height:1.25;margin-top:4px}
-.promo-card{border:1px solid var(--line);border-radius:16px;padding:14px;margin-bottom:12px;background:var(--key)}
-.promo-card h4{margin:0 0 8px;display:flex;align-items:center;gap:8px}
-.promo-card .meta{font-size:12px;color:var(--mut);margin-bottom:8px}
+.promo-card{border:1px solid var(--line);border-radius:20px;padding:16px;margin-bottom:14px;background:var(--card);box-shadow:var(--sh)}
+.promo-card h4{margin:0 0 8px;display:flex;align-items:center;gap:8px;font-size:16px}
+.promo-card .meta{font-size:12px;color:var(--mut);margin-bottom:10px;line-height:1.4}
+.ret-card{border:1px solid var(--line);border-radius:20px;padding:16px;margin-bottom:14px;background:var(--card);box-shadow:var(--sh)}
+.ret-card h4{margin:0 0 4px;font-size:16px;display:flex;align-items:center;gap:8px}
+.ret-card .rnum{font-size:12px;font-weight:700;color:var(--pri);background:color-mix(in srgb,var(--pri) 12%,transparent);padding:2px 10px;border-radius:999px}
+.ret-card .meta{font-size:12px;color:var(--mut);margin-bottom:12px}
+.field-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px;margin-bottom:10px}
+.field-grid label{display:flex;flex-direction:column;gap:4px;font-size:11px;font-weight:600;color:var(--mut);text-transform:uppercase;letter-spacing:.04em}
+.field-grid input,.field-grid select{height:42px;border:1px solid var(--line);background:var(--key);border-radius:12px;padding:0 12px;font-size:14px;color:var(--ink);font-weight:500}
+.field-grid input:focus,.office input:focus,.office select:focus{outline:none;border-color:var(--pri);box-shadow:0 0 0 3px color-mix(in srgb,var(--pri) 22%,transparent)}
+.btn-row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px}
+.top{backdrop-filter:blur(8px)}
+.card{border-radius:var(--radius)!important;box-shadow:var(--sh)!important;border:1px solid var(--line)}
+.game{transition:transform .12s,box-shadow .12s,opacity .12s}.game:hover:not(.closed){transform:translateY(-2px)}
+button{cursor:pointer;border:none;font-family:inherit}
+.office input:not([type=color]):not([type=file]):not([type=checkbox]),.office select{transition:border-color .15s,box-shadow .15s}
 @media(max-width:620px){.shell{flex-direction:column-reverse}.nav{width:100%;flex-direction:row;justify-content:space-around;padding:6px}.nav .logo{display:none}.nav button{width:auto;flex:1}#scan{width:100%}}
 `;
 
@@ -156,12 +170,9 @@ class LotteryPosPanel extends HTMLElement{
   set narrow(v){}set panel(v){}set route(v){}
   ws(type,extra={}){return this._hass.callWS({type:"lottery_pos/"+type,...extra})}
   async init(){const s=this.s;try{s.dark=localStorage.getItem("lottery_pos_dark")==="1"}catch(e){}
-    this._posTerminal=location.hash.includes("pos-terminal");
-    if(this._posTerminal){s.tab="sell";document.title=(document.title||"Lottery POS")+" — Terminal"}
     s.data=await this.ws("state");this._tm=setInterval(()=>this.tick(),30000);s.sel=[s.data.games[0]?.id];s.bt=s.data.bet_types[0]?.key;s.retailer=s.data.retailers[0]?.id;
     this.shadowRoot.addEventListener("click",e=>{const el=e.target.closest("[data-a]");if(!el)return;if(el.dataset.a==="rmprizerow"||el.dataset.a==="rmnprizerow"){const row=el.closest(".p-prize-row,.n-prize-row");if(row){const box=row.parentElement;if(box&&box.querySelectorAll(".p-prize-row,.n-prize-row").length>1)row.remove();else this.toast("Keep at least one prize row",1)}return}this.act(el.dataset.a,el.dataset)});
-    this.render();
-    if(this._posTerminal){try{await this.requestFullscreen?.()||this.shadowRoot.host?.requestFullscreen?.()}catch(e){}}}
+    this.render()}
   bt(){return this.s.data.all_bet_types.find(b=>b.key===this.s.bt)}
   allowedBTs(){const s=this.s,d=s.data,sel=s.sel.map(id=>d.all_games.find(g=>g.id===id)).filter(Boolean);return d.bet_types.filter(b=>sel.every(g=>!g.bet_types?.length||g.bet_types.includes(b.key)))}
   btl(k){return this.s.data.all_bet_types.find(b=>b.key===k)?.label||k}
@@ -178,9 +189,7 @@ class LotteryPosPanel extends HTMLElement{
   shrink(file,max=240){return new Promise((res,rej)=>{const img=new Image(),u=URL.createObjectURL(file);img.onload=()=>{const k=Math.min(1,max/Math.max(img.width,img.height)),c=document.createElement("canvas");c.width=Math.round(img.width*k);c.height=Math.round(img.height*k);c.getContext("2d").drawImage(img,0,0,c.width,c.height);URL.revokeObjectURL(u);res(c.toDataURL("image/png"))};img.onerror=()=>rej(new Error("Not an image"));img.src=u})}
   render(){const s=this.s;if(!s.data)return;this.classList.toggle("dark",!!s.dark);const d=s.data,st=d.settings,admin=!!this._hass.user?.is_admin;
     if(!admin&&s.tab!=="sell")s.tab="sell";
-    const posOnly=!!this._posTerminal;
-    if(posOnly)s.tab="sell";
-    const items=[["sell","mdi:cash-register","Sell",1],["office","mdi:cog","Back office",admin&&!posOnly]];
+    const items=[["sell","mdi:cash-register","Sell",1],["office","mdi:cog","Back office",admin]];
     const nav=items.filter(i=>i[3]).map(i=>`<button class="${s.tab===i[0]?"on":""}" data-a="tab" data-v="${i[0]}"><ha-icon icon="${i[1]}"></ha-icon>${i[2]}</button>`).join("");
     const body=s.tab==="sell"?this.sellHTML():`${this.subTabs()}<div class="office">${this.officeBody()}</div>`;
     this.shadowRoot.innerHTML=`<style>${CSS}</style><div class="shell"><nav class="nav"><div class="logo">${st.logo?`<img src="${st.logo}">`:esc((st.name||"L").slice(0,2).toUpperCase())}</div>${nav}</nav><div class="content"><div class="top">
@@ -188,7 +197,7 @@ class LotteryPosPanel extends HTMLElement{
       <div class="kpi"><span>Sales today</span><b>${d.currency} ${fmt(d.summary.sales_today)}</b></div><div class="kpi"><span>Tickets</span><b>${d.summary.tickets_today}</b></div>
       <input id="scan" placeholder="Scan ticket…" value="${esc(s.scan)}" inputmode="numeric">
       <button class="ic" data-a="replay" title="Replay last ticket"><ha-icon icon="mdi:replay"></ha-icon></button>
-      <select id="ret">${d.retailers.map(r=>`<option value="${r.id}" ${r.id===s.retailer?"selected":""}>${r.name}</option>`).join("")}</select>
+      <select id="ret">${d.retailers.map(r=>`<option value="${r.id}" ${r.id===s.retailer?"selected":""}>${r.number?r.number+" · ":""}${r.name}</option>`).join("")}</select>
       <button class="ic" data-a="theme" title="Dark / light"><ha-icon icon="${s.dark?"mdi:weather-sunny":"mdi:weather-night"}"></ha-icon></button></div>${body}</div></div>`;
     const q=x=>this.shadowRoot.querySelector(x);
     q("#scan").oninput=e=>s.scan=e.target.value;
@@ -232,9 +241,9 @@ class LotteryPosPanel extends HTMLElement{
   reportsHTML(){const s=this.s,r=s.report,c=s.data.currency,kc=(l,v,cl="")=>`<div class="kc"><span>${l}</span><b class="${cl}">${v}</b></div>`;
     const head=`<div class="card" style="grid-column:1/-1"><h3>Sales &amp; liability report</h3><div class="row"><input type="date" id="f" value="${s.rpf||today()}"><input type="date" id="t" value="${s.rpt||today()}"><button data-a="runreport">Run</button><button class="ghost" data-a="printreport">Print</button><button class="ghost" data-a="csv">Download CSV</button><small style="color:var(--mut)">by draw date</small></div>`;
     if(!r)return head+`<div class="empty">Pick dates and press Run</div></div>`;const T=r.totals;
-    return head+`<div class="kpis">${kc("Tickets sold",T.tickets)}${kc("Cancelled",T.cancelled)}${kc("Plays",T.lines)}${kc("Sales ("+c+")",fmt(T.sales))}${kc("Commission",fmt(T.commission))}${kc("Prizes won",fmt(T.prizes))}${kc("Prizes paid",fmt(T.paid),"pos")}${kc("Unpaid liability",fmt(T.unpaid),T.unpaid>0?"neg":"")}${kc("Open exposure",fmt(T.exposure))}${kc("Net",fmt(T.net),T.net>=0?"pos":"neg")}</div>
+    return head+`<div class="kpis">${kc("Tickets sold",T.tickets)}${kc("Cancelled",T.cancelled)}${kc("Plays",T.lines)}${kc("Sales ("+c+")",fmt(T.sales))}${kc("Sell commission",fmt(T.commission_sell??T.commission))}${kc("Redeem commission",fmt(T.commission_redeem||0))}${kc("Prizes won",fmt(T.prizes))}${kc("Prizes paid",fmt(T.paid),"pos")}${kc("Unpaid liability",fmt(T.unpaid),T.unpaid>0?"neg":"")}${kc("Open exposure",fmt(T.exposure))}${kc("Net",fmt(T.net),T.net>=0?"pos":"neg")}</div>
       <p class="note">Open exposure = the most you could owe on draws that have no results yet if every open play won.</p>
-      <h4>By retailer</h4><table><tr><th>Retailer</th><th>Tickets</th><th>Plays</th><th>Sales</th><th>Comm.</th><th>Prizes</th><th>Unpaid</th><th>Net</th></tr>${r.rows.map(x=>`<tr><td>${esc(x.retailer)}</td><td>${x.tickets}</td><td>${x.lines}</td><td>${fmt(x.sales)}</td><td>${fmt(x.commission)}</td><td>${fmt(x.prizes)}</td><td>${fmt(x.unpaid)}</td><td class="${x.net>=0?"pos":"neg"}">${fmt(x.net)}</td></tr>`).join("")}</table>
+      <h4>By retailer</h4><table><tr><th>#</th><th>Retailer</th><th>Tickets</th><th>Plays</th><th>Sales</th><th>Sell comm.</th><th>Redeem comm.</th><th>Prizes</th><th>Unpaid</th><th>Net</th></tr>${r.rows.map(x=>`<tr><td>${esc(x.number||"")}</td><td>${esc(x.retailer)}</td><td>${x.tickets}</td><td>${x.lines}</td><td>${fmt(x.sales)}</td><td>${fmt(x.commission_sell??x.commission)}</td><td>${fmt(x.commission_redeem||0)}</td><td>${fmt(x.prizes)}</td><td>${fmt(x.unpaid)}</td><td class="${x.net>=0?"pos":"neg"}">${fmt(x.net)}</td></tr>`).join("")}</table>
       <h4>By game</h4>${r.games.length?`<table><tr><th>Game</th><th>Tickets</th><th>Sales</th><th>Prizes</th><th>Net</th></tr>${r.games.map(x=>`<tr><td>${esc(x.game)}</td><td>${x.tickets}</td><td>${fmt(x.sales)}</td><td>${fmt(x.prizes)}</td><td class="${x.net>=0?"pos":"neg"}">${fmt(x.net)}</td></tr>`).join("")}</table>`:`<div class="empty">No sales in this range</div>`}</div>`}
   subTabs(){const s=this.s,t=[["games","mdi:calendar-clock","Games & schedule"],["brand","mdi:palette-outline","Branding & message"],["ticket","mdi:receipt-text-outline","Ticket design"],["promos","mdi:gift-outline","Promotions"],["results","mdi:trophy-outline","Results & winners"],["reports","mdi:chart-box-outline","Reports"],["retailers","mdi:store-outline","Retailers"]];
     return `<div class="subtabs">${t.map(x=>`<button class="${s.sub===x[0]?"on":""}" data-a="sub" data-v="${x[0]}"><ha-icon icon="${x[1]}"></ha-icon>${x[2]}</button>`).join("")}</div>`}
@@ -256,9 +265,45 @@ class LotteryPosPanel extends HTMLElement{
       <button data-a="savebrand">Save branding</button></div>`}
   addGameCard(){return `<div class="card"><h3>Add game</h3><div class="row"><input id="gn" placeholder="Name"><input id="gc" type="color" value="#64748b"><label>Draw <input id="gt" type="time" value="13:00"></label><label>Cut-off <input id="gk" type="time" value="12:45"></label></div>
       <div class="row"><input type="file" id="gfile" accept="image/*"><input id="gl" placeholder="or logo URL (/local/...)" style="flex:1"><button data-a="addgame">Add</button></div></div>`}
-  retailersCard(){const d=this.s.data;return `<div class="card" style="grid-column:1/-1"><h3>Retailers</h3><table><tr><th>Name</th><th>Commission %</th><th>Active</th><th></th></tr>${d.all_retailers.map(r=>`<tr class="rtr" data-id="${r.id}"><td><input class="r-name" value="${esc(r.name)}"></td><td><input class="r-com" type="number" step="any" min="0" max="100" value="${r.commission}" style="width:90px"></td><td><input class="r-act" type="checkbox" ${r.active!==false?"checked":""}></td><td><button data-a="saveret" data-v="${r.id}">Save</button></td></tr>`).join("")}</table></div>
-    <div class="card"><h3>Add retailer</h3><div class="row"><input id="rn" placeholder="Name"><input id="rc" type="number" placeholder="Commission %" value="10" style="width:120px"><button data-a="addret">Add</button></div></div>`}
-  promosCard(){const s=this.s,list=s.data.promotions||[],games=s.data.all_games||[],cur=s.data.currency||"";
+  retailersCard(){const d=this.s.data,list=d.all_retailers||[];
+    const cards=list.map(r=>{
+      const cs=r.commission_sell??r.commission??0, cr=r.commission_redeem??0;
+      const person=[r.first_name,r.last_name].filter(Boolean).join(" ");
+      return `<div class="ret-card rtr" data-id="${esc(r.id)}">
+        <h4><span class="rnum">#${esc(r.number||"—")}</span> ${esc(r.name)} ${r.active!==false?`<span class="st paid">Active</span>`:`<span class="st unpaid">Off</span>`}</h4>
+        <div class="meta">${person?esc(person)+" · ":""}${r.phone?esc(r.phone)+" · ":""}Sell ${cs}% · Redeem ${cr}%</div>
+        <div class="field-grid">
+          <label>Number <input class="r-num" value="${esc(r.number||"")}" maxlength="20"></label>
+          <label>Shop name <input class="r-name" value="${esc(r.name||"")}" maxlength="80"></label>
+          <label>First name <input class="r-fn" value="${esc(r.first_name||"")}" maxlength="60"></label>
+          <label>Last name <input class="r-ln" value="${esc(r.last_name||"")}" maxlength="60"></label>
+          <label>Phone <input class="r-ph" value="${esc(r.phone||"")}" maxlength="40"></label>
+          <label>Sell commission % <input class="r-cs" type="number" step="any" min="0" max="100" value="${cs}"></label>
+          <label>Redeem commission % <input class="r-cr" type="number" step="any" min="0" max="100" value="${cr}"></label>
+          <label>Active <span style="height:42px;display:flex;align-items:center"><input class="r-act" type="checkbox" ${r.active!==false?"checked":""}></span></label>
+        </div>
+        <label style="display:block;font-size:11px;font-weight:600;color:var(--mut);text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px">Address</label>
+        <input class="r-addr" value="${esc(r.address||"")}" maxlength="200" style="width:100%;height:42px;border:1px solid var(--line);background:var(--key);border-radius:12px;padding:0 12px;margin-bottom:10px">
+        <div class="btn-row"><button data-a="saveret" data-v="${esc(r.id)}">Save retailer</button></div>
+      </div>`}).join("")||`<div class="empty">No retailers yet</div>`;
+    return `<div class="card" style="grid-column:1/-1"><h3>Retailers</h3>
+      <p class="note">Each shop has a retailer number, contact details, sell commission (% of ticket sales) and redeem commission (% of prizes paid out at that shop).</p>
+      ${cards}
+      <h3 style="margin-top:20px">Add retailer</h3>
+      <div class="field-grid">
+        <label>Number <input id="rn-num" placeholder="001" maxlength="20"></label>
+        <label>Shop name <input id="rn" placeholder="Shop name" maxlength="80"></label>
+        <label>First name <input id="rn-fn" maxlength="60"></label>
+        <label>Last name <input id="rn-ln" maxlength="60"></label>
+        <label>Phone <input id="rn-ph" maxlength="40"></label>
+        <label>Sell commission % <input id="rc" type="number" step="any" min="0" max="100" value="10"></label>
+        <label>Redeem commission % <input id="rc-r" type="number" step="any" min="0" max="100" value="2"></label>
+      </div>
+      <label style="display:block;font-size:11px;font-weight:600;color:var(--mut);text-transform:uppercase;letter-spacing:.04em;margin:8px 0 4px">Address</label>
+      <input id="rn-addr" placeholder="Street, city" maxlength="200" style="width:100%;height:42px;border:1px solid var(--line);background:var(--key);border-radius:12px;padding:0 12px;margin-bottom:10px">
+      <div class="btn-row"><button data-a="addret">Add retailer</button></div>
+    </div>`}
+  promosCard()  promosCard(){const s=this.s,list=s.data.promotions||[],games=s.data.all_games||[],cur=s.data.currency||"";
     const trigLabel={min_plays:"Min. plays",min_games:"Min. distinct games",min_amount:"Min. purchase amount",min_lines:"Min. plays"};
     const gameChecks=(sel,cls)=>games.map(g=>`<label class="chip"><input type="checkbox" class="${cls}" value="${esc(g.id)}" ${(sel||[]).includes(g.id)?"checked":""}> ${esc(g.name)}</label>`).join("")||`<span class="note">No games defined</span>`;
     const scopeTxt=p=>{const g=p.games||[];return g.length?g.map(id=>games.find(x=>x.id===id)?.name||id).join(", "):"All games"};
@@ -405,22 +450,7 @@ class LotteryPosPanel extends HTMLElement{
   async act(a,ds){const s=this.s;
     switch(a){
       case "theme":s.dark=!s.dark;try{localStorage.setItem("lottery_pos_dark",s.dark?"1":"0")}catch(e){}this.render();break;
-      case "tab":{
-        if(ds.v==="sell"&&!this._posTerminal){
-          const url=new URL(location.href);
-          url.hash="pos-terminal";
-          const w=window.open(url.toString(),"lottery_pos_terminal","noopener,noreferrer");
-          if(w){
-            try{w.moveTo(0,0);w.resizeTo(screen.availWidth,screen.availHeight)}catch(e){}
-            this.toast("POS terminal opened in a new window");
-          }else{
-            this.toast("Allow pop-ups to open the full-screen POS",1);
-            s.tab="sell";this.render();
-          }
-          break;
-        }
-        s.tab=ds.v;this.render();break;
-      }
+      case "tab":s.tab=ds.v;this.render();break;
       case "game":s.sel=s.sel.includes(ds.v)?(s.sel.length>1?s.sel.filter(x=>x!==ds.v):s.sel):[...s.sel,ds.v];this.render();break;
       case "bt":s.bt=ds.v;s.num=s.num.slice(0,this.bt().digits);s.field="num";this.render();break;
       case "field":s.field=ds.v;this.paint();break;
@@ -455,11 +485,12 @@ class LotteryPosPanel extends HTMLElement{
       case "savebrand":{const q=x=>this.shadowRoot.querySelector(x).value;const logo=s.logoDraft!==undefined?s.logoDraft:s.data.settings.logo;if(await this.call("set_branding",{name:q("#bn"),logo})){s.data=await this.ws("state");s.logoDraft=undefined;s.nameDraft=undefined;this.toast("Branding saved");this.render()}break}
       case "saveres":{const q=x=>this.shadowRoot.querySelector(x).value;const dt=q("#rd"),r=await this.call("set_results",{game:q("#rg"),date:dt,numbers:[q("#r1"),q("#r2"),q("#r3")].filter(Boolean)});if(r){this.toast(`Settled - ${r.winners.length} winning ticket(s)`);s.rf=!s.rf||dt<s.rf?dt:s.rf;s.rt=!s.rt||dt>s.rt?dt:s.rt;await this.loadResults()}break}
       case "runreport":case "printreport":{const q=x=>this.shadowRoot.querySelector(x).value;s.rpf=q("#f");s.rpt=q("#t");const r=await this.call("report",{date_from:s.rpf,date_to:s.rpt});if(!r)break;s.report=r;if(a==="printreport")this.print(this.reportHTML(r));else this.render();break}
-      case "csv":{const r=s.report;if(!r)return this.toast("Run the report first",1);const L=[["Retailer","Tickets","Plays","Sales","Commission","Prizes","Paid","Unpaid","Net"],...r.rows.map(x=>[x.retailer,x.tickets,x.lines,x.sales,x.commission,x.prizes,x.paid,x.unpaid,x.net]),[],["Game","Tickets","Sales","Prizes","Net"],...r.games.map(x=>[x.game,x.tickets,x.sales,x.prizes,x.net]),[],["Totals"],...Object.entries(r.totals)];const csv=L.map(row=>row.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(",")).join("\n"),el=document.createElement("a");el.href=URL.createObjectURL(new Blob([csv],{type:"text/csv"}));el.download=`lottery-report-${r.from}_${r.to}.csv`;el.click();break}
+      case "csv":{const r=s.report;if(!r)return this.toast("Run the report first",1);const L=[["Number","Retailer","Tickets","Plays","Sales","Sell commission","Redeem commission","Total commission","Prizes","Paid","Unpaid","Net"],...r.rows.map(x=>[x.number||"",x.retailer,x.tickets,x.lines,x.sales,x.commission_sell??x.commission,x.commission_redeem||0,x.commission,x.prizes,x.paid,x.unpaid,x.net]),[],["Game","Tickets","Sales","Prizes","Net"],...r.games.map(x=>[x.game,x.tickets,x.sales,x.prizes,x.net]),[],["Totals"],...Object.entries(r.totals)];const csv=L.map(row=>row.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(",")).join("\n"),el=document.createElement("a");el.href=URL.createObjectURL(new Blob([csv],{type:"text/csv"}));el.download=`lottery-report-${r.from}_${r.to}.csv`;el.click();break}
       case "sub":s.sub=ds.v;if(ds.v==="results"&&!s.rs)await this.loadResults();else this.render();break;
       case "loadrs":{const q=x=>this.shadowRoot.querySelector(x).value;s.rf=q("#rf");s.rt=q("#rt");await this.loadResults();break}
-      case "paywin":{if(!await this.modal({title:"Pay prize",text:`Ticket ${ds.v}`,ok:"Mark as paid"}))break;const r=await this.call("redeem",{ticket_id:ds.v});if(r){this.print(this.receipt(r,"PAID "+fmt(r.prize)));await this.loadResults()}break}
-      case "saveret":{const r=this.shadowRoot.querySelector(`.rtr[data-id="${ds.v}"]`);if(await this.call("update_retailer",{retailer_id:String(ds.v),name:r.querySelector(".r-name").value,commission:+r.querySelector(".r-com").value,active:r.querySelector(".r-act").checked})){s.data=await this.ws("state");this.toast("Retailer saved");this.render()}break}
+      case "paywin":{if(!await this.modal({title:"Pay prize",text:`Ticket ${ds.v}`,ok:"Mark as paid"}))break;const r=await this.call("redeem",{ticket_id:ds.v,retailer_id:s.retailer});if(r){this.print(this.receipt(r,"PAID "+fmt(r.prize)));await this.loadResults()}break}
+      case "saveret":{const r=this.shadowRoot.querySelector(`.rtr[data-id="${ds.v}"]`);if(!r)break;
+        if(await this.call("update_retailer",{retailer_id:String(ds.v),name:r.querySelector(".r-name").value,number:r.querySelector(".r-num").value,first_name:r.querySelector(".r-fn").value,last_name:r.querySelector(".r-ln").value,address:r.querySelector(".r-addr").value,phone:r.querySelector(".r-ph").value,commission_sell:+r.querySelector(".r-cs").value,commission_redeem:+r.querySelector(".r-cr").value,active:r.querySelector(".r-act").checked})){s.data=await this.ws("state");this.toast("Retailer saved");this.render()}break}
       case "savedesign":{const r=await this.call("set_ticket_design",{design:this.design()});if(r){s.data=await this.ws("state");s.design=null;this.toast("Ticket layout saved");this.render()}break}
       case "resetdesign":s.design={...this.designDefaults()};this.render();break;
       case "testprint":{const d=this.design();this.print(this.docHTML(this.receiptInner(this.sampleTicket(),"TEST TICKET",d),d));break}
@@ -504,13 +535,14 @@ class LotteryPosPanel extends HTMLElement{
       case "delpromo":{if(!await this.modal({title:"Delete promotion",text:"Remove this promotion? Existing ticket codes stay valid.",ok:"Delete"}))break;
         const r=await this.call("delete_promotion",{promotion_id:String(ds.v)});
         if(r!==null){s.data=await this.ws("state");this.toast("Deleted");this.render()}break}
-      case "addret":{const q=x=>this.shadowRoot.querySelector(x).value;if(await this.call("add_retailer",{name:q("#rn"),commission:+q("#rc")})){s.data=await this.ws("state");this.toast("Retailer added");this.render()}break}
+      case "addret":{const q=x=>this.shadowRoot.querySelector(x)?.value??"";
+        if(await this.call("add_retailer",{name:q("#rn"),number:q("#rn-num"),first_name:q("#rn-fn"),last_name:q("#rn-ln"),address:q("#rn-addr"),phone:q("#rn-ph"),commission_sell:+q("#rc")||0,commission_redeem:+q("#rc-r")||0,active:true})){s.data=await this.ws("state");this.toast("Retailer added");this.render()}break}
       case "addgame":{const q=x=>this.shadowRoot.querySelector(x).value;if(await this.call("add_game",{name:q("#gn"),color:q("#gc"),draw_time:q("#gt"),cutoff:q("#gk"),logo:s.gameLogo||q("#gl")})){s.gameLogo="";s.data=await this.ws("state");this.toast("Game added");this.render()}break}
     }}
 
   async scanned(id){if(!id)return;id=(String(id).match(/\d{12,}$/)||[String(id)])[0];const s=this.s,cur=s.data.currency;s.scan="";
     const t=await this.call("ticket",{ticket_id:id});this.render();if(!t)return;
-    if(t.status==="won"){if(await this.modal({title:"🏆 Winner!",big:`${cur} ${fmt(t.prize)}`,text:`Ticket ${t.id}`,ok:"Pay prize",tone:"win"})){const r=await this.call("redeem",{ticket_id:t.id});if(r){this.print(this.receipt(r,"PAID "+fmt(r.prize)));this.toast("Prize paid");s.data=await this.ws("state");this.render()}}}
+    if(t.status==="won"){if(await this.modal({title:"🏆 Winner!",big:`${cur} ${fmt(t.prize)}`,text:`Ticket ${t.id}`,ok:"Pay prize",tone:"win"})){const r=await this.call("redeem",{ticket_id:t.id,retailer_id:s.retailer});if(r){this.print(this.receipt(r,"PAID "+fmt(r.prize)));this.toast("Prize paid");s.data=await this.ws("state");this.render()}}}
     else if(t.status==="redeemed")this.toast("Already paid",1);
     else if(t.status==="cancelled")this.toast("Ticket was cancelled",1);
     else if(t.status==="lost"){this.load(t);this.toast("Not a winner - lines loaded to replay")}
@@ -520,8 +552,8 @@ class LotteryPosPanel extends HTMLElement{
   docHTML(inner,d){return `<html><head><style>@page{margin:0}body{margin:0;padding:2mm;width:${d.width}mm}</style></head><body>${inner}</body></html>`}
   receipt(t,title){const d=this.saved();return this.docHTML(this.receiptInner(t,title,d),d)}
   reportHTML(r){const T=r.totals,c=this.s.data.currency,k=(l,v)=>`<tr><td>${l}</td><td align=right><b>${v}</b></td></tr>`;
-    return `<html><body style="font:12px Arial,sans-serif;margin:16px"><h3>${esc(this.s.data.settings.name)} - report ${r.from} → ${r.to}</h3><table width="300">${k("Tickets sold",T.tickets)}${k("Cancelled",T.cancelled)}${k("Plays",T.lines)}${k("Sales "+c,fmt(T.sales))}${k("Commission",fmt(T.commission))}${k("Prizes won",fmt(T.prizes))}${k("Prizes paid",fmt(T.paid))}${k("Unpaid liability",fmt(T.unpaid))}${k("Open exposure",fmt(T.exposure))}${k("NET",fmt(T.net))}</table>
-    <h4>By retailer</h4><table width="100%" border="0"><tr align=left><th>Retailer</th><th>Tkts</th><th>Sales</th><th>Comm</th><th>Prizes</th><th>Unpaid</th><th>Net</th></tr>${r.rows.map(x=>`<tr><td>${esc(x.retailer)}</td><td>${x.tickets}</td><td>${fmt(x.sales)}</td><td>${fmt(x.commission)}</td><td>${fmt(x.prizes)}</td><td>${fmt(x.unpaid)}</td><td>${fmt(x.net)}</td></tr>`).join("")}</table>
+    return `<html><body style="font:12px Arial,sans-serif;margin:16px"><h3>${esc(this.s.data.settings.name)} - report ${r.from} → ${r.to}</h3><table width="300">${k("Tickets sold",T.tickets)}${k("Cancelled",T.cancelled)}${k("Plays",T.lines)}${k("Sales "+c,fmt(T.sales))}${k("Sell commission",fmt(T.commission_sell??T.commission))}${k("Redeem commission",fmt(T.commission_redeem||0))}${k("Prizes won",fmt(T.prizes))}${k("Prizes paid",fmt(T.paid))}${k("Unpaid liability",fmt(T.unpaid))}${k("Open exposure",fmt(T.exposure))}${k("NET",fmt(T.net))}</table>
+    <h4>By retailer</h4><table width="100%" border="0"><tr align=left><th>#</th><th>Retailer</th><th>Tkts</th><th>Sales</th><th>Sell</th><th>Redeem</th><th>Prizes</th><th>Unpaid</th><th>Net</th></tr>${r.rows.map(x=>`<tr><td>${esc(x.number||"")}</td><td>${esc(x.retailer)}</td><td>${x.tickets}</td><td>${fmt(x.sales)}</td><td>${fmt(x.commission_sell??x.commission)}</td><td>${fmt(x.commission_redeem||0)}</td><td>${fmt(x.prizes)}</td><td>${fmt(x.unpaid)}</td><td>${fmt(x.net)}</td></tr>`).join("")}</table>
     <h4>By game</h4><table width="100%"><tr align=left><th>Game</th><th>Tkts</th><th>Sales</th><th>Prizes</th><th>Net</th></tr>${r.games.map(x=>`<tr><td>${esc(x.game)}</td><td>${x.tickets}</td><td>${fmt(x.sales)}</td><td>${fmt(x.prizes)}</td><td>${fmt(x.net)}</td></tr>`).join("")}</table></body></html>`}
   print(html){const w=window.open("","_blank","width=380,height=640");if(!w)return this.toast("Allow pop-ups to print",1);w.document.write(html);w.document.close();w.focus();setTimeout(()=>w.print(),300)}
 }

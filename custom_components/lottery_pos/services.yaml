@@ -9,10 +9,17 @@ cancel_ticket:
 redeem_ticket:
   fields:
     ticket_id: {required: true, selector: {text: {}}}
+    retailer_id: {selector: {text: {}}}
 add_retailer:
   fields:
     name: {required: true, selector: {text: {}}}
-    commission: {required: true, example: 10, selector: {number: {min: 0, max: 100}}}
+    number: {selector: {text: {}}}
+    first_name: {selector: {text: {}}}
+    last_name: {selector: {text: {}}}
+    address: {selector: {text: {}}}
+    phone: {selector: {text: {}}}
+    commission_sell: {example: 10, selector: {number: {min: 0, max: 100}}}
+    commission_redeem: {example: 2, selector: {number: {min: 0, max: 100}}}
 add_game:
   fields:
     name: {required: true, selector: {text: {}}}

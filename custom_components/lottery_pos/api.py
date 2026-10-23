@@ -50,8 +50,8 @@ def _last(s, m):
 @_cmd("cancel", {vol.Required("ticket_id"): str})
 def _cancel(s, m): return s.cancel(m["ticket_id"])
 
-@_cmd("redeem", {vol.Required("ticket_id"): str})
-def _redeem(s, m): return s.redeem(m["ticket_id"])
+@_cmd("redeem", {vol.Required("ticket_id"): str, vol.Optional("retailer_id"): str})
+def _redeem(s, m): return s.redeem(m["ticket_id"], m.get("retailer_id"))
 
 @_cmd("draw_results", {vol.Required("date"): str})
 def _draws(s, m): return s.draw_results(m["date"])
@@ -62,8 +62,19 @@ def _report(s, m): return s.report(m["date_from"], m["date_to"])
 @_cmd("set_results", {vol.Required("game"): str, vol.Required("date"): str, vol.Required("numbers"): [str]}, admin=True)
 def _results(s, m): return {"winners": s.set_results(m["game"], m["date"], m["numbers"])}
 
-@_cmd("add_retailer", {vol.Required("name"): str, vol.Required("commission"): vol.Coerce(float)}, admin=True)
-def _add_r(s, m): return s.add_retailer(m["name"], m["commission"])
+@_cmd("add_retailer", {
+    vol.Required("name"): str,
+    vol.Optional("number", default=""): str,
+    vol.Optional("first_name", default=""): str,
+    vol.Optional("last_name", default=""): str,
+    vol.Optional("address", default=""): str,
+    vol.Optional("phone", default=""): str,
+    vol.Optional("commission_sell", default=10): vol.Coerce(float),
+    vol.Optional("commission_redeem", default=0): vol.Coerce(float),
+    vol.Optional("commission"): vol.Coerce(float),  # legacy
+    vol.Optional("active", default=True): bool,
+}, admin=True)
+def _add_r(s, m): return s.add_retailer(m)
 
 @_cmd("add_game", {vol.Required("name"): str, vol.Optional("color", default="#64748b"): str,
                    vol.Optional("draw_time", default="12:00"): str, vol.Optional("cutoff", default="11:45"): str,
@@ -96,9 +107,21 @@ def _upd_b(s, m): return s.update_bet_type(m["key"], m["label"], m["multiplier"]
 @_cmd("set_ticket_design", {vol.Required("design"): dict}, admin=True)
 def _design(s, m): return s.set_ticket_design(m["design"])
 
-@_cmd("update_retailer", {vol.Required("retailer_id"): str, vol.Required("name"): str,
-                          vol.Required("commission"): vol.Coerce(float), vol.Required("active"): bool}, admin=True)
-def _upd_r(s, m): return s.update_retailer(m["retailer_id"], m["name"], m["commission"], m["active"])
+@_cmd("update_retailer", {
+    vol.Required("retailer_id"): str,
+    vol.Required("name"): str,
+    vol.Optional("number"): str,
+    vol.Optional("first_name"): str,
+    vol.Optional("last_name"): str,
+    vol.Optional("address"): str,
+    vol.Optional("phone"): str,
+    vol.Optional("commission_sell"): vol.Coerce(float),
+    vol.Optional("commission_redeem"): vol.Coerce(float),
+    vol.Optional("commission"): vol.Coerce(float),
+    vol.Optional("active"): bool,
+}, admin=True)
+def _upd_r(s, m):
+    return s.update_retailer(m["retailer_id"], {k: v for k, v in m.items() if k not in ("retailer_id", "type")})
 
 @_cmd("results_summary", {vol.Required("date_from"): str, vol.Required("date_to"): str}, admin=True)
 def _rsum(s, m): return s.results_summary(m["date_from"], m["date_to"])

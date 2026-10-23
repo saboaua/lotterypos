@@ -32,7 +32,7 @@ class LotteryStore:
             data = {
                 "games": copy.deepcopy(DEFAULT_GAMES),
                 "bet_types": copy.deepcopy(DEFAULT_BET_TYPES),
-                "retailers": [{"id": "main", "name": "Main Shop", "commission": 10.0, "active": True}],
+                "retailers": [{"id": "main", "number": "001", "name": "Main Shop", "first_name": "", "last_name": "", "address": "", "phone": "", "commission": 10.0, "commission_sell": 10.0, "commission_redeem": 2.0, "active": True}],
                 "tickets": {}, "results": {}, "seq": 0,
                 "promotions": copy.deepcopy(DEFAULT_PROMOTIONS),
             }
@@ -49,6 +49,18 @@ class LotteryStore:
             g.setdefault("draw_days", [])
         for b in data["bet_types"]:
             b.setdefault("enabled", True)
+        for i, r in enumerate(data.get("retailers", [])):
+            r.setdefault("number", f"{i+1:03d}")
+            r.setdefault("first_name", "")
+            r.setdefault("last_name", "")
+            r.setdefault("address", "")
+            r.setdefault("phone", "")
+            r.setdefault("commission", 10.0)
+            r.setdefault("commission_sell", float(r.get("commission", 10.0)))
+            r.setdefault("commission_redeem", 0.0)
+            r.setdefault("active", True)
+            if not isinstance(r.get("id"), str):
+                r["id"] = str(r["id"])
         for p in data["promotions"]:
             p.setdefault("enabled", True)
             if p.get("trigger") == "min_lines":
@@ -251,13 +263,18 @@ class LotteryStore:
         self.hass.bus.async_fire(f"{DOMAIN}_ticket_cancelled", {"ticket_id": t["id"]})
         return self.public(t)
 
-    def redeem(self, tid: str) -> dict:
+    def redeem(self, tid: str, retailer_id: str | None = None) -> dict:
         t = self.ticket(tid)
         if t["status"] == "redeemed":
             raise LotteryError("Already paid")
         if t["status"] != "won":
             raise LotteryError("Not a winning ticket" if t["status"] == "lost" else f"Ticket is {t['status']} (draw pending)")
-        t["status"], t["redeemed_at"] = "redeemed", dt_util.now().isoformat()
+        rid = (retailer_id or t.get("retailer_id") or "").strip()
+        if rid:
+            self._find("retailers", "id", rid, "retailer")
+        t["status"] = "redeemed"
+        t["redeemed_at"] = dt_util.now().isoformat()
+        t["redeemed_by"] = rid or t.get("retailer_id")
         self._save()
         return self.public(t)
 
@@ -312,21 +329,30 @@ class LotteryStore:
 
     # ---------- reports ----------
     def report(self, date_from: str, date_to: str) -> dict:
-        money = ("sales", "commission", "prizes", "paid", "unpaid", "net")
-        rows = {r["id"]: {"retailer": r["name"], "commission_pct": r["commission"], "tickets": 0, "lines": 0,
-                          "sales": 0.0, "commission": 0.0, "prizes": 0.0, "paid": 0.0, "unpaid": 0.0, "net": 0.0}
-                for r in self.data["retailers"]}
+        money = ("sales", "commission_sell", "commission_redeem", "commission", "prizes", "paid", "unpaid", "net")
+        retailers = {r["id"]: r for r in self.data["retailers"]}
+        rows = {r["id"]: {
+            "retailer": r["name"], "number": r.get("number", ""),
+            "commission_sell_pct": float(r.get("commission_sell", r.get("commission", 0))),
+            "commission_redeem_pct": float(r.get("commission_redeem", 0)),
+            "tickets": 0, "lines": 0,
+            "sales": 0.0, "commission_sell": 0.0, "commission_redeem": 0.0, "commission": 0.0,
+            "prizes": 0.0, "paid": 0.0, "unpaid": 0.0, "net": 0.0,
+        } for r in self.data["retailers"]}
         games = {g["id"]: {"game": g["name"], "tickets": 0, "sales": 0.0, "prizes": 0.0, "net": 0.0} for g in self.data["games"]}
         bts = {b["key"]: b for b in self.data["bet_types"]}
         cancelled, exposure = 0, 0.0
         for t in self.data["tickets"].values():
             lines = [l for l in t["lines"] if date_from <= l["date"] <= date_to]
-            if not lines or t["retailer_id"] not in rows:
+            if not lines:
                 continue
             if t["status"] == "cancelled":
                 cancelled += 1
                 continue
-            row, seen = rows[t["retailer_id"]], set()
+            rid = t.get("retailer_id")
+            if rid not in rows:
+                continue
+            row, seen = rows[rid], set()
             row["tickets"] += 1
             for l in lines:
                 row["lines"] += 1
@@ -344,10 +370,19 @@ class LotteryStore:
                 if not l["settled"] and l["bet_type"] in bts:
                     bt = bts[l["bet_type"]]
                     exposure += l["amount"] * bt["multiplier"] * (3 if bt["mode"] == "chances" else 1)
-        totals = {"tickets": 0, "cancelled": cancelled, "lines": 0, "sales": 0.0, "commission": 0.0, "prizes": 0.0,
-                  "paid": 0.0, "unpaid": 0.0, "net": 0.0, "exposure": round(exposure, 2)}
+            # redeem commission credited to the shop that paid out
+            if t["status"] == "redeemed" and t.get("prize"):
+                pay_rid = t.get("redeemed_by") or rid
+                if pay_rid in rows:
+                    pct = rows[pay_rid]["commission_redeem_pct"]
+                    rows[pay_rid]["commission_redeem"] += float(t["prize"]) * pct / 100
+        totals = {"tickets": 0, "cancelled": cancelled, "lines": 0, "sales": 0.0,
+                  "commission_sell": 0.0, "commission_redeem": 0.0, "commission": 0.0,
+                  "prizes": 0.0, "paid": 0.0, "unpaid": 0.0, "net": 0.0, "exposure": round(exposure, 2)}
         for row in rows.values():
-            row["commission"] = row["sales"] * row["commission_pct"] / 100
+            row["commission_sell"] = row["sales"] * row["commission_sell_pct"] / 100
+            row["commission"] = row["commission_sell"] + row["commission_redeem"]
+            # operator view: sales out, commissions owed to retailer, prizes paid reduce net
             row["net"] = row["sales"] - row["commission"] - row["prizes"]
             for k in ("tickets", "lines") + money:
                 totals[k] += row[k]
@@ -703,11 +738,40 @@ class LotteryStore:
 
 
 
-    def update_retailer(self, rid: str, name: str, commission: float, active: bool) -> dict:
+    def _normalize_retailer_fields(self, f: dict, existing: dict | None = None) -> dict:
+        out = dict(existing or {})
+        name = str(f.get("name", out.get("name", ""))).strip()[:80]
+        if not name:
+            raise LotteryError("Shop / retailer name is required")
+        out["name"] = name
+        number = str(f.get("number", out.get("number", ""))).strip()[:20]
+        out["number"] = number
+        out["first_name"] = str(f.get("first_name", out.get("first_name", ""))).strip()[:60]
+        out["last_name"] = str(f.get("last_name", out.get("last_name", ""))).strip()[:60]
+        out["address"] = str(f.get("address", out.get("address", ""))).strip()[:200]
+        out["phone"] = str(f.get("phone", out.get("phone", ""))).strip()[:40]
+        try:
+            cs = float(f.get("commission_sell", f.get("commission", out.get("commission_sell", out.get("commission", 10)))))
+            cr = float(f.get("commission_redeem", out.get("commission_redeem", 0)))
+        except (TypeError, ValueError) as err:
+            raise LotteryError("Invalid commission") from err
+        if not 0 <= cs <= 100 or not 0 <= cr <= 100:
+            raise LotteryError("Commission must be 0–100%")
+        out["commission_sell"] = round(cs, 2)
+        out["commission_redeem"] = round(cr, 2)
+        out["commission"] = out["commission_sell"]  # legacy field
+        out["active"] = bool(f.get("active", out.get("active", True)))
+        return out
+
+    def update_retailer(self, rid: str, fields: dict) -> dict:
         r = self._find("retailers", "id", rid, "retailer")
-        if not name.strip() or not 0 <= commission <= 100:
-            raise LotteryError("Name required and commission must be 0-100")
-        r.update({"name": name.strip(), "commission": float(commission), "active": bool(active)})
+        updated = self._normalize_retailer_fields(fields, r)
+        # unique retailer number if set
+        num = updated.get("number") or ""
+        if num and any(x.get("number") == num and x["id"] != rid for x in self.data["retailers"]):
+            raise LotteryError(f"Retailer number {num} already in use")
+        r.clear()
+        r.update({"id": rid, **updated})
         self._save()
         return r
 
@@ -723,11 +787,23 @@ class LotteryStore:
         self._save()
         return self.data["settings"]
 
-    def add_retailer(self, name: str, commission: float) -> dict:
-        rid = re.sub(r"\W+", "_", name.lower()).strip("_") or secrets.token_hex(3)
+    def add_retailer(self, fields: dict) -> dict:
+        fields = self._normalize_retailer_fields(fields, None)
+        base = re.sub(r"\W+", "_", fields["name"].lower()).strip("_") or secrets.token_hex(3)
+        rid = base
         if any(r["id"] == rid for r in self.data["retailers"]):
-            raise LotteryError("Retailer already exists")
-        r = {"id": rid, "name": name, "commission": float(commission), "active": True}
+            rid = f"{base}_{secrets.token_hex(2)}"
+        num = fields.get("number") or ""
+        if not num:
+            # auto number: next sequential
+            existing = [r.get("number", "") for r in self.data["retailers"]]
+            n = 1
+            while f"{n:03d}" in existing:
+                n += 1
+            fields["number"] = f"{n:03d}"
+        elif any(r.get("number") == num for r in self.data["retailers"]):
+            raise LotteryError(f"Retailer number {num} already in use")
+        r = {"id": rid, **fields}
         self.data["retailers"].append(r)
         self._save()
         return r

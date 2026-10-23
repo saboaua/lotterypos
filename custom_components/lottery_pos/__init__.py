@@ -26,9 +26,20 @@ def _register_services(hass):
     reg(DOMAIN, "set_results", wrap(lambda s, d: s.set_results(d["game"], d["date"], d["numbers"])),
         vol.Schema({vol.Required("game"): str, vol.Required("date"): str, vol.Required("numbers"): [str]}))
     reg(DOMAIN, "cancel_ticket", wrap(lambda s, d: s.cancel(d["ticket_id"])), vol.Schema({vol.Required("ticket_id"): str}))
-    reg(DOMAIN, "redeem_ticket", wrap(lambda s, d: s.redeem(d["ticket_id"])), vol.Schema({vol.Required("ticket_id"): str}))
-    reg(DOMAIN, "add_retailer", wrap(lambda s, d: s.add_retailer(d["name"], d["commission"])),
-        vol.Schema({vol.Required("name"): str, vol.Required("commission"): vol.Coerce(float)}))
+    reg(DOMAIN, "redeem_ticket", wrap(lambda s, d: s.redeem(d["ticket_id"], d.get("retailer_id"))),
+        vol.Schema({vol.Required("ticket_id"): str, vol.Optional("retailer_id"): str}))
+    reg(DOMAIN, "add_retailer", wrap(lambda s, d: s.add_retailer(d)),
+        vol.Schema({
+            vol.Required("name"): str,
+            vol.Optional("number"): str,
+            vol.Optional("first_name"): str,
+            vol.Optional("last_name"): str,
+            vol.Optional("address"): str,
+            vol.Optional("phone"): str,
+            vol.Optional("commission_sell", default=10): vol.Coerce(float),
+            vol.Optional("commission_redeem", default=0): vol.Coerce(float),
+            vol.Optional("commission"): vol.Coerce(float),
+        }))
     reg(DOMAIN, "add_game", wrap(lambda s, d: s.add_game(d["name"], d.get("color", "#64748b"), d.get("draw_time", "12:00"),
                                                          d.get("cutoff", "11:45"), d.get("logo", ""))),
         vol.Schema({vol.Required("name"): str, vol.Optional("color"): str, vol.Optional("draw_time"): str,
