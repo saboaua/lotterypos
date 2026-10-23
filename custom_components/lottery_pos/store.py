@@ -39,8 +39,12 @@ class LotteryStore:
                 "promotions": copy.deepcopy(DEFAULT_PROMOTIONS),
             }
         data["currency"] = currency
-        data.setdefault("settings", {"name": "Lottery POS", "logo": ""})
-        data["settings"].setdefault("ticker", {"enabled": True, "text": "Welcome! Play responsibly - good luck to all our players!", "speed": 5, "color": "#39ff14"})
+        data.setdefault("settings", {"name": "Lottery POS", "logo": "", "operator": "", "tagline": "", "license_text": ""})
+        data["settings"].setdefault("operator", "")
+        data["settings"].setdefault("tagline", "")
+        data["settings"].setdefault("license_text", "")
+        data["settings"].setdefault("ticker", {"enabled": True, "text": "Welcome! Play responsibly - good luck to all our players!", "speed": 5, "color": "#39ff14", "messages": []})
+        data["settings"]["ticker"].setdefault("messages", [])
         data["settings"]["ticket"] = {**TICKET_DEFAULTS, **data["settings"].get("ticket", {})}
         data.setdefault("promotions", copy.deepcopy(DEFAULT_PROMOTIONS))
         data.setdefault("promo_codes", {})
@@ -187,9 +191,18 @@ class LotteryStore:
     def public(self, t: dict) -> dict:
         out = copy.deepcopy(t)
         try:
-            out["retailer_name"] = self._find("retailers", "id", t["retailer_id"], "retailer")["name"]
+            r = self._find("retailers", "id", t["retailer_id"], "retailer")
+            out["retailer_name"] = r.get("name") or t["retailer_id"]
+            out["retailer_number"] = r.get("number") or ""
+            out["retailer_phone"] = r.get("phone") or ""
+            out["retailer_address"] = r.get("address") or ""
+            out["retailer_first_name"] = r.get("first_name") or ""
+            out["retailer_last_name"] = r.get("last_name") or ""
         except LotteryError:
             out["retailer_name"] = t["retailer_id"]
+            out["retailer_number"] = ""
+            out["retailer_phone"] = ""
+            out["retailer_address"] = ""
         return out
 
     def _closed(self, line: dict) -> bool:
@@ -788,6 +801,8 @@ class LotteryStore:
                 raise LotteryError(f"Invalid value for {k}") from err
         if out["font"] not in ("mono", "sans", "serif", "condensed") or out["align"] not in ("left", "center"):
             raise LotteryError("Invalid font or alignment")
+        if out.get("divider") and out["divider"] not in ("dashed", "solid", "double", "none"):
+            out["divider"] = "dashed"
         if not 8 <= out["size"] <= 20 or not 40 <= out["width"] <= 100 or not 12 <= out["qr_size"] <= 60:
             raise LotteryError("Size out of range")
         if not 20 <= out.get("logo_height", 40) <= 80:
@@ -1139,7 +1154,8 @@ class LotteryStore:
         self._save()
         return r
 
-    def set_branding(self, name: str, logo: str) -> dict:
+    def set_branding(self, name: str, logo: str, operator: str = "", tagline: str = "",
+                     license_text: str = "") -> dict:
         name = name.strip()[:40]
         if not name:
             raise LotteryError("Enter a lottery name")
@@ -1147,7 +1163,13 @@ class LotteryStore:
             raise LotteryError("Logo must be an uploaded image or a /local/ path")
         if len(logo) > 300_000:
             raise LotteryError("Logo image is too large")
-        self.data["settings"].update({"name": name, "logo": logo})
+        self.data["settings"].update({
+            "name": name,
+            "logo": logo,
+            "operator": (operator or "").strip()[:80],
+            "tagline": (tagline or "").strip()[:120],
+            "license_text": (license_text or "").strip()[:120],
+        })
         self._save()
         return self.data["settings"]
 
@@ -1172,11 +1194,31 @@ class LotteryStore:
         self._save()
         return r
 
-    def set_ticker(self, text: str, enabled: bool, speed: int, color: str) -> dict:
+    def set_ticker(self, text: str, enabled: bool, speed: int, color: str,
+                   messages: list | None = None) -> dict:
         if not re.fullmatch(r"#[0-9a-fA-F]{6}", color):
             raise LotteryError("Invalid color")
-        self.data["settings"]["ticker"] = {"text": text.strip()[:200], "enabled": bool(enabled),
-                                           "speed": max(1, min(10, int(speed))), "color": color}
+        cleaned = []
+        for i, m in enumerate(messages or []):
+            if not isinstance(m, dict):
+                continue
+            txt = str(m.get("text") or "").strip()[:200]
+            if not txt:
+                continue
+            cleaned.append({
+                "id": str(m.get("id") or f"m{i+1}"),
+                "text": txt,
+                "enabled": bool(m.get("enabled", True)),
+                "start_at": str(m.get("start_at") or "").strip()[:32],
+                "end_at": str(m.get("end_at") or "").strip()[:32],
+            })
+        self.data["settings"]["ticker"] = {
+            "text": text.strip()[:200],
+            "enabled": bool(enabled),
+            "speed": max(1, min(10, int(speed))),
+            "color": color,
+            "messages": cleaned,
+        }
         self._save()
         return self.data["settings"]["ticker"]
 

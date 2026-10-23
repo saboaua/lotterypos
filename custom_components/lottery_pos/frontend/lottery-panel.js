@@ -211,7 +211,29 @@ table{width:100%;border-collapse:collapse;font-size:13px}td,th{padding:9px 6px;b
 .field-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px;margin-bottom:10px}
 .field-grid label{display:flex;flex-direction:column;gap:4px;font-size:11px;font-weight:600;color:var(--mut);text-transform:uppercase;letter-spacing:.04em}
 .field-grid input,.field-grid select{height:42px;border:1px solid var(--line);background:var(--key);border-radius:12px;padding:0 12px;font-size:14px;color:var(--ink);font-weight:500}
-.field-grid input:focus,.office input:focus,.office select:focus{outline:none;border-color:var(--pri);box-shadow:0 0 0 3px color-mix(in srgb,var(--pri) 22%,transparent)}
+.field-grid input:focus
+.modal-bg{position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:80;display:grid;place-items:center;padding:16px;backdrop-filter:blur(2px)}
+.modal{background:var(--card);border-radius:22px;max-width:560px;width:100%;max-height:90vh;overflow:auto;padding:22px;box-shadow:0 24px 60px rgba(0,0,0,.35);border:1px solid var(--line)}
+.modal h3{margin:0 0 12px;font-size:18px}
+.modal .modal-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:16px;flex-wrap:wrap}
+.glist-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px}
+.glist-toolbar h3{margin:0}
+.rlist{display:flex;flex-direction:column;gap:10px}
+.rlist-item{border:1px solid var(--line);border-radius:16px;background:var(--card);overflow:hidden;box-shadow:var(--sh)}
+.rlist-head{display:flex;align-items:center;gap:12px;padding:14px 16px;cursor:pointer;width:100%;text-align:left;background:transparent;color:var(--ink);border:0}
+.rlist-head:hover{background:var(--key)}
+.rlist-head .meta{flex:1;min-width:0}
+.rlist-head .meta b{display:block;font-size:15px}
+.rlist-head .meta small{display:block;color:var(--mut);font-size:12px;margin-top:2px}
+.rlist-body{padding:14px 16px 18px;border-top:1px solid var(--line);background:color-mix(in srgb,var(--key) 55%,var(--card))}
+.rlist-body .field-grid{grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px 14px}
+.rlist-body .field-grid input,.rlist-body .field-grid select{width:100%}
+.rlist-body .btn-row{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px}
+.sched-list{display:flex;flex-direction:column;gap:10px;margin:10px 0}
+.sched-row{border:1px solid var(--line);border-radius:14px;padding:12px;background:var(--key);display:flex;flex-direction:column;gap:8px}
+.sched-row .row{margin:0}
+.ticket-preview{border:1px dashed var(--line);border-radius:12px;padding:12px;background:#fff;color:#111;font-family:monospace;font-size:12px;line-height:1.4;max-width:280px}
+,.office input:focus,.office select:focus{outline:none;border-color:var(--pri);box-shadow:0 0 0 3px color-mix(in srgb,var(--pri) 22%,transparent)}
 .btn-row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px}
 .top{backdrop-filter:blur(8px)}
 .card{border-radius:var(--radius)!important;box-shadow:var(--sh)!important;border:1px solid var(--line)}
@@ -223,7 +245,7 @@ button{cursor:pointer;border:none;font-family:inherit}
 
 class LotteryPosPanel extends HTMLElement{
   constructor(){super();this.attachShadow({mode:"open"});
-    this.s={tab:"sell",sel:[],bt:"",date:today(),num:"",amt:"",field:"num",lines:[],retailer:"",data:null,scan:"",report:null,glogos:{},sub:"games",symbols:[],balls:[],mega:"",allZodiac:false,draws:1,session:"",editGame:null,previewGame:null};
+    this.s={tab:"sell",sel:[],bt:"",date:today(),num:"",amt:"",field:"num",lines:[],retailer:"",data:null,scan:"",report:null,glogos:{},sub:"games",symbols:[],balls:[],mega:"",allZodiac:false,draws:1,session:"",editGame:null,editRetailer:null,showAddGame:false,showAddRetailer:false,previewGame:null};
     this._kh=e=>this.onKey(e)}
   connectedCallback(){window.addEventListener("keydown",this._kh)}
   disconnectedCallback(){window.removeEventListener("keydown",this._kh);clearInterval(this._tm)}
@@ -327,7 +349,22 @@ class LotteryPosPanel extends HTMLElement{
       if(j)j.style.display=v==="jackpot"?"":"none";
     };gf.onchange()}}
 
-  tickerHTML(){const t=this.s.data.settings.ticker;if(!t||!t.enabled||!t.text)return"";const w=t.text.length*18+1000,dur=Math.max(8,w/(30+t.speed*30));return `<div class="ticker"><div class="tk" style="color:${t.color};animation-duration:${dur.toFixed(1)}s">${esc(t.text)}</div></div>`}
+  tickerHTML(){const t=this.s.data.settings.ticker;if(!t||!t.enabled)return"";
+    const now=new Date();
+    const active=[];
+    if(t.text)active.push(t.text);
+    for(const m of (t.messages||[])){
+      if(!m||!m.enabled||!m.text)continue;
+      const start=m.start_at?new Date(m.start_at):null;
+      const end=m.end_at?new Date(m.end_at):null;
+      if(start&&!isNaN(start)&&now<start)continue;
+      if(end&&!isNaN(end)&&now>end)continue;
+      active.push(m.text);
+    }
+    if(!active.length)return"";
+    const text=active.join("   ·   ");
+    const w=text.length*18+1000,dur=Math.max(8,w/(30+(t.speed||5)*30));
+    return `<div class="ticker"><div class="tk" style="color:${t.color||"#39ff14"};animation-duration:${dur.toFixed(1)}s">${esc(text)}</div></div>`}
 
 
   sessionsOf(g){return (g&&g.sessions)||[]}
@@ -449,12 +486,27 @@ class LotteryPosPanel extends HTMLElement{
       <h4>By game</h4>${r.games.length?`<table><tr><th>Game</th><th>Tickets</th><th>Sales</th><th>Prizes</th><th>Net</th></tr>${r.games.map(x=>`<tr><td>${esc(x.game)}</td><td>${x.tickets}</td><td>${fmt(x.sales)}</td><td>${fmt(x.prizes)}</td><td class="${x.net>=0?"pos":"neg"}">${fmt(x.net)}</td></tr>`).join("")}</table>`:`<div class="empty">No sales in this range</div>`}</div>`}
   subTabs(){const s=this.s,t=[["games","mdi:calendar-clock","Games & schedule"],["brand","mdi:palette-outline","Branding & message"],["ticket","mdi:receipt-text-outline","Ticket design"],["promos","mdi:gift-outline","Promotions"],["results","mdi:trophy-outline","Results & winners"],["reports","mdi:chart-box-outline","Reports"],["retailers","mdi:store-outline","Retailers"]];
     return `<div class="subtabs">${t.map(x=>`<button class="${s.sub===x[0]?"on":""}" data-a="sub" data-v="${x[0]}"><ha-icon icon="${x[1]}"></ha-icon>${x[2]}</button>`).join("")}</div>`}
-  officeBody(){const f={games:()=>this.gamesCard()+this.addGameCard()+this.btCard(),brand:()=>this.brandCard()+this.tickerCard(),ticket:()=>this.designCard(),promos:()=>this.promosCard(),results:()=>this.resultsHTML(),reports:()=>this.reportsHTML(),retailers:()=>this.retailersCard()};return (f[this.s.sub]||f.games)()}
-  tickerCard(){const t=this.s.data.settings.ticker||{},cols=[["#39ff14","Green"],["#ffb000","Amber"],["#ff3b3b","Red"],["#ffffff","White"],["#22d3ee","Cyan"]];return `<div class="card"><h3>Scrolling message</h3>
-    <div class="row"><input id="tt" value="${esc(t.text)}" style="flex:1;min-width:220px" maxlength="200" placeholder="Message for the scrolling display"></div>
-    <div class="row"><label>Speed <select id="ts">${[1,2,3,4,5,6,7,8,9,10].map(n=>`<option ${n===t.speed?"selected":""}>${n}</option>`).join("")}</select></label>
-    <label>Color <select id="tc">${cols.map(c=>`<option value="${c[0]}" ${c[0]===t.color?"selected":""}>${c[1]}</option>`).join("")}</select></label>
-    <label><input type="checkbox" id="te" ${t.enabled?"checked":""}> Show on screen</label></div><button data-a="saveticker">Save message</button></div>`}
+  officeBody(){const f={games:()=>this.gamesCard()+this.btCard(),brand:()=>this.brandCard()+this.tickerCard(),ticket:()=>this.designCard(),promos:()=>this.promosCard(),results:()=>this.resultsHTML(),reports:()=>this.reportsHTML(),retailers:()=>this.retailersCard()};const body=(f[this.s.sub]||f.games)();const modals=(this.s.showAddGame?this.addGameModal():"")+(this.s.showAddRetailer?this.addRetailerModal():"");return body+modals}
+  tickerCard(){const t=this.s.data.settings.ticker||{},cols=[["#39ff14","Green"],["#ffb000","Amber"],["#ff3b3b","Red"],["#ffffff","White"],["#22d3ee","Cyan"]];
+    const msgs=t.messages||[];
+    const sched=msgs.map((m,i)=>`<div class="sched-row" data-i="${i}">
+      <div class="row"><input class="tm-text" value="${esc(m.text||"")}" placeholder="Scheduled message" style="flex:1" maxlength="200">
+        <label class="chip"><input type="checkbox" class="tm-en" ${m.enabled!==false?"checked":""}> On</label>
+        <button type="button" class="ghost" data-a="rmsched" data-v="${i}">✕</button></div>
+      <div class="row"><label>From <input type="datetime-local" class="tm-start" value="${esc(m.start_at||"")}"></label>
+        <label>Until <input type="datetime-local" class="tm-end" value="${esc(m.end_at||"")}"></label></div>
+    </div>`).join("")||`<span class="note">No scheduled messages yet</span>`;
+    return `<div class="card"><h3>Scrolling message</h3>
+    <p class="note">Default message always scrolls when enabled. Scheduled messages replace or append when their time window is active.</p>
+    <div class="row"><input id="tt" value="${esc(t.text||"")}" style="flex:1;min-width:220px" maxlength="200" placeholder="Default scrolling message"></div>
+    <div class="row"><label>Speed <select id="ts">${[1,2,3,4,5,6,7,8,9,10].map(n=>`<option ${n===(t.speed||5)?"selected":""}>${n}</option>`).join("")}</select></label>
+    <label>Color <select id="tc">${cols.map(c=>`<option value="${c[0]}" ${c[0]===(t.color||"#39ff14")?"selected":""}>${c[1]}</option>`).join("")}</select></label>
+    <label><input type="checkbox" id="te" ${t.enabled!==false?"checked":""}> Show on screen</label></div>
+    <h4 style="margin:14px 0 6px">Scheduled messages</h4>
+    <div class="sched-list">${sched}</div>
+    <button type="button" class="ghost" data-a="addsched">+ Add scheduled message</button>
+    <div class="row" style="margin-top:12px"><button data-a="saveticker">Save messages</button></div></div>`}
+  
   gamesCard(){const s=this.s,d=s.data,openId=s.editGame;
     const list=(d.all_games||[]).map(g=>{
       const fmt=g.format||"digit";
@@ -468,8 +520,10 @@ class LotteryPosPanel extends HTMLElement{
         </button>
         ${open?this.gameConfigHTML(g):""}
       </div>`}).join("")||`<div class="empty">No games yet</div>`;
-    return `<div class="card" style="grid-column:1/-1"><h3>Games</h3>
-      <p class="note">Tap a game to open its configuration. Format controls digit range, zodiac, or jackpot ball rules and prizes.</p>
+    return `<div class="card" style="grid-column:1/-1">
+      <div class="glist-toolbar"><h3>Games &amp; schedule</h3>
+        <button type="button" data-a="openaddgame"><ha-icon icon="mdi:plus"></ha-icon> Add game</button></div>
+      <p class="note">Games stay collapsed. Tap a row to expand its settings. Format controls digits, zodiac, Play Whe, or jackpot rules.</p>
       <div class="glist">${list}</div></div>`}
   gameConfigHTML(g){const d=this.s.data,fmt=g.format||"digit",cur=d.currency||"";
     const prizes=g.jackpot_prizes||[];
@@ -553,31 +607,57 @@ class LotteryPosPanel extends HTMLElement{
       <td><input class="b-max" type="number" step="any" min="0" value="${b.max_stake??100}" style="width:80px"></td>
       <td><input type="checkbox" class="b-en" ${b.enabled!==false?"checked":""}></td>
       <td><button data-a="savebt" data-v="${b.key}">Save</button></td></tr>`).join("")}</table></div>`}
-  brandCard(){const s=this.s,st=s.data.settings,logo=s.logoDraft!==undefined?s.logoDraft:st.logo;return `<div class="card"><h3>Branding</h3><div class="row"><input id="bn" value="${esc(s.nameDraft??st.name)}" placeholder="Lottery name" style="flex:1" maxlength="40"></div>
+  brandCard(){const s=this.s,st=s.data.settings,logo=s.logoDraft!==undefined?s.logoDraft:st.logo;
+    return `<div class="card"><h3>Branding &amp; ticket header</h3>
+      <p class="note">These fields appear at the top of every printed ticket, similar to state / national lottery receipts.</p>
+      <div class="row"><input id="bn" value="${esc(s.nameDraft??st.name)}" placeholder="Lottery name" style="flex:1" maxlength="40"></div>
+      <div class="row"><input id="bop" value="${esc(s.operatorDraft??st.operator??"")}" placeholder="Operator / authority (e.g. National Lottery Board)" style="flex:1" maxlength="80"></div>
+      <div class="row"><input id="btag" value="${esc(s.taglineDraft??st.tagline??"")}" placeholder="Tagline (e.g. Play responsibly)" style="flex:1" maxlength="120"></div>
+      <div class="row"><input id="blic" value="${esc(s.licenseDraft??st.license_text??"")}" placeholder="License / registration line" style="flex:1" maxlength="120"></div>
       <div class="row">${logo?`<img class="prev" src="${logo}">`:`<span style="color:#94a3b8">No logo yet</span>`}<input type="file" id="logofile" accept="image/*"><button class="ghost" data-a="clearlogo">Remove logo</button></div>
-      <button data-a="savebrand">Save branding</button></div>`}
-  addGameCard(){return `<div class="card"><h3>Add game</h3>
-      <div class="row"><input id="gn" placeholder="Name" style="flex:1;min-width:140px"><input id="gc" type="color" value="#64748b">
-        <label>Format <select id="gf" data-a="addfmtpreview">
-          <option value="digit">Digit number</option>
-          <option value="zodiac">Zodiac + number</option>
-          <option value="jackpot">Jackpot balls</option>
-        </select></label></div>
-      <div class="row" id="add-digit-row"><label>Number digits <select id="gd">${[2,3,4,5,6].map(n=>`<option value="${n}" ${n===4?"selected":""}>${n} (${"0".repeat(n)}–${"9".repeat(n)})</option>`).join("")}</select></label>
-        <span class="note">For digit / zodiac games</span></div>
-      <div class="row" id="add-jackpot-row" style="display:none"><label>Balls to pick <input id="gmc" type="number" value="5" min="1" max="10" style="width:70px"></label>
-        <label>From 01– <input id="gmm" type="number" value="30" min="5" max="99" style="width:70px"></label>
-        <label>Mega <select id="gmega"><option value="0">None</option><option value="1">1 mega</option></select></label>
-        <label>Mega max <input id="gmx" type="number" value="15" min="1" max="99" style="width:70px"></label></div>
-      <div class="row"><label>Draw <input id="gt" type="time" value="13:00"></label><label>Cut-off <input id="gk" type="time" value="12:45"></label></div>
-      <div class="row"><input type="file" id="gfile" accept="image/*"><input id="gl" placeholder="or logo URL (/local/...)" style="flex:1"><button data-a="addgame">Add game</button></div></div>`}
-  retailersCard(){const d=this.s.data,list=d.all_retailers||[];
-    const cards=list.map(r=>{
-      const cs=r.commission_sell??r.commission??0, cr=r.commission_redeem??0;
+      <div class="ticket-preview">
+        <div style="font-weight:700">${esc((s.nameDraft??st.name)||"Lottery")}</div>
+        <div style="font-size:11px">${esc((s.operatorDraft??st.operator)||"")}</div>
+        <div style="font-size:11px">${esc((s.taglineDraft??st.tagline)||"")}</div>
+        <div style="margin-top:6px;border-top:1px dashed #999;padding-top:4px">Retailer #001 · Main Shop</div>
+        <div style="font-size:11px">123 Main St · Tel 555-0100</div>
+      </div>
+      <button data-a="savebrand" style="margin-top:12px">Save branding</button></div>`}
+  
+  addGameModal(){return `<div class="modal-bg" data-a="closeaddgame"><div class="modal" onclick="event.stopPropagation()">
+    <h3>Create game</h3>
+    <div class="row"><input id="gn" placeholder="Game name" style="flex:1;min-width:140px"><input id="gc" type="color" value="#64748b"></div>
+    <div class="row"><label>Format <select id="gf">
+      <option value="digit">Digit number</option>
+      <option value="zodiac">Zodiac + number</option>
+      <option value="whe">Play Whe (1–36)</option>
+      <option value="jackpot">Jackpot balls</option>
+    </select></label>
+    <label>Digits <select id="gd">${[2,3,4,5,6].map(n=>`<option value="${n}" ${n===4?"selected":""}>${n}</option>`).join("")}</select></label></div>
+    <div class="row"><label>Draw <input id="gt" type="time" value="13:00"></label>
+      <label>Cut-off <input id="gk" type="time" value="12:45"></label></div>
+    <div class="row"><label>Jackpot balls <input id="gmc" type="number" value="5" min="1" max="10" style="width:70px"></label>
+      <label>Pool max <input id="gmm" type="number" value="30" min="5" max="99" style="width:70px"></label>
+      <label>Mega <select id="gmega"><option value="0">No</option><option value="1">Yes</option></select></label>
+      <label>Mega max <input id="gmx" type="number" value="15" style="width:70px"></label></div>
+    <p class="note">You can add AM/PM sessions after the game is created (edit the game).</p>
+    <div class="modal-actions"><button class="ghost" data-a="closeaddgame">Cancel</button><button data-a="addgame">Create game</button></div>
+  </div></div>`}
+  addGameCard(){return ""}
+  
+  retailersCard(){const s=this.s,d=s.data,openId=s.editRetailer;
+    const list=(d.all_retailers||[]).map(r=>{
+      const open=openId===r.id;
       const person=[r.first_name,r.last_name].filter(Boolean).join(" ");
-      return `<div class="ret-card rtr" data-id="${esc(r.id)}">
-        <h4><span class="rnum">#${esc(r.number||"—")}</span> ${esc(r.name)} ${r.active!==false?`<span class="st paid">Active</span>`:`<span class="st unpaid">Off</span>`}</h4>
-        <div class="meta">${person?esc(person)+" · ":""}${r.phone?esc(r.phone)+" · ":""}Sell ${cs}% · Redeem ${cr}%</div>
+      const cs=Number(r.commission_sell??r.commission??10),cr=Number(r.commission_redeem??0);
+      const head=`<button type="button" class="rlist-head" data-a="editret" data-v="${esc(r.id)}">
+        <span class="rnum">#${esc(r.number||"—")}</span>
+        <span class="meta"><b>${esc(r.name||"Retailer")}</b>
+          <small>${person?esc(person)+" · ":""}${r.phone?esc(r.phone)+" · ":""}Sell ${cs}% · Redeem ${cr}% · ${r.active!==false?"Active":"Off"}</small></span>
+        ${r.active!==false?`<span class="st paid">Active</span>`:`<span class="st unpaid">Off</span>`}
+        <ha-icon icon="${open?"mdi:chevron-up":"mdi:chevron-down"}"></ha-icon>
+      </button>`;
+      const body=open?`<div class="rlist-body">
         <div class="field-grid">
           <label>Number <input class="r-num" value="${esc(r.number||"")}" maxlength="20"></label>
           <label>Shop name <input class="r-name" value="${esc(r.name||"")}" maxlength="80"></label>
@@ -588,27 +668,33 @@ class LotteryPosPanel extends HTMLElement{
           <label>Redeem commission % <input class="r-cr" type="number" step="any" min="0" max="100" value="${cr}"></label>
           <label>Active <span style="height:42px;display:flex;align-items:center"><input class="r-act" type="checkbox" ${r.active!==false?"checked":""}></span></label>
         </div>
-        <label style="display:block;font-size:11px;font-weight:600;color:var(--mut);text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px">Address</label>
-        <input class="r-addr" value="${esc(r.address||"")}" maxlength="200" style="width:100%;height:42px;border:1px solid var(--line);background:var(--key);border-radius:12px;padding:0 12px;margin-bottom:10px">
+        <label style="display:block;font-size:11px;font-weight:600;color:var(--mut);text-transform:uppercase;letter-spacing:.04em;margin:8px 0 4px">Address</label>
+        <input class="r-addr" value="${esc(r.address||"")}" maxlength="200" style="width:100%;height:42px;border:1px solid var(--line);background:var(--key);border-radius:12px;padding:0 12px">
         <div class="btn-row"><button data-a="saveret" data-v="${esc(r.id)}" style="min-width:140px">Save retailer</button></div>
-      </div>`}).join("")||`<div class="empty">No retailers yet</div>`;
-    return `<div class="card" style="grid-column:1/-1"><h3>Retailers</h3>
-      <p class="note">Each shop has a retailer number, contact details, sell commission (% of ticket sales) and redeem commission (% of prizes paid out at that shop).</p>
-      ${cards}
-      <h3 style="margin-top:20px">Add retailer</h3>
-      <div class="field-grid">
-        <label>Number <input id="rn-num" placeholder="001" maxlength="20"></label>
-        <label>Shop name <input id="rn" placeholder="Shop name" maxlength="80"></label>
-        <label>First name <input id="rn-fn" maxlength="60"></label>
-        <label>Last name <input id="rn-ln" maxlength="60"></label>
-        <label>Phone <input id="rn-ph" maxlength="40"></label>
-        <label>Sell commission % <input id="rc" type="number" step="any" min="0" max="100" value="10"></label>
-        <label>Redeem commission % <input id="rc-r" type="number" step="any" min="0" max="100" value="2"></label>
-      </div>
-      <label style="display:block;font-size:11px;font-weight:600;color:var(--mut);text-transform:uppercase;letter-spacing:.04em;margin:8px 0 4px">Address</label>
-      <input id="rn-addr" placeholder="Street, city" maxlength="200" style="width:100%;height:42px;border:1px solid var(--line);background:var(--key);border-radius:12px;padding:0 12px;margin-bottom:10px">
-      <div class="btn-row"><button data-a="addret" style="min-width:160px">+ Add retailer</button></div>
-    </div>`}
+      </div>`:"";
+      return `<div class="rlist-item ${open?"open":""}">${head}${body}</div>`;
+    }).join("")||`<div class="empty">No retailers yet</div>`;
+    return `<div class="card" style="grid-column:1/-1">
+      <div class="glist-toolbar"><h3>Retailers</h3>
+        <button type="button" data-a="openaddret"><ha-icon icon="mdi:plus"></ha-icon> Add retailer</button></div>
+      <p class="note">Tap a retailer to expand contact details and commission. Collapsed list stays easy to scan.</p>
+      <div class="rlist">${list}</div></div>`}
+  addRetailerModal(){return `<div class="modal-bg" data-a="closeaddret"><div class="modal" onclick="event.stopPropagation()">
+    <h3>Add retailer</h3>
+    <div class="field-grid">
+      <label>Number <input id="rn-num" placeholder="001" maxlength="20"></label>
+      <label>Shop name <input id="rn" placeholder="Shop name" maxlength="80"></label>
+      <label>First name <input id="rn-fn" maxlength="60"></label>
+      <label>Last name <input id="rn-ln" maxlength="60"></label>
+      <label>Phone <input id="rn-ph" maxlength="40"></label>
+      <label>Sell commission % <input id="rn-cs" type="number" value="10" step="any" min="0" max="100"></label>
+      <label>Redeem commission % <input id="rn-cr" type="number" value="0" step="any" min="0" max="100"></label>
+    </div>
+    <label style="display:block;font-size:11px;font-weight:600;color:var(--mut);margin:10px 0 4px">Address</label>
+    <input id="rn-addr" maxlength="200" style="width:100%;height:42px;border:1px solid var(--line);background:var(--key);border-radius:12px;padding:0 12px">
+    <div class="modal-actions"><button class="ghost" data-a="closeaddret">Cancel</button><button data-a="addret">Create retailer</button></div>
+  </div></div>`}
+  
   promosCard(){const s=this.s,list=s.data.promotions||[],games=s.data.all_games||[],cur=s.data.currency||"";
     const trigLabel={min_plays:"Min. plays",min_games:"Min. distinct games",min_amount:"Min. purchase amount",min_lines:"Min. plays"};
     const gameChecks=(sel,cls)=>games.map(g=>`<label class="chip"><input type="checkbox" class="${cls}" value="${esc(g.id)}" ${(sel||[]).includes(g.id)?"checked":""}> ${esc(g.name)}</label>`).join("")||`<span class="note">No games defined</span>`;
@@ -689,7 +775,7 @@ class LotteryPosPanel extends HTMLElement{
       <div style="font-size:1.55em;font-weight:900;letter-spacing:.18em;margin:4px 0">${esc(p.code||"000000")}</div>
       <div style="font-size:0.82em;line-height:1.25;margin-top:4px">${esc(p.instruction||"Visit www.shocolottery.com and check if you have won")}</div>
     </div>`}
-    designDefaults(){return {font:"mono",size:12,width:72,align:"center",header:"",footer:"Good luck!",show_logo:true,logo_height:40,show_name:true,show_retailer:true,show_datetime:true,bold_total:true,show_barcode:true,show_qr:false,qr_size:28,qr_prefix:"",show_jackpot:false,jackpot_mode:"auto",jackpot_text:"",jackpot_game:"",messages:[]}}
+    designDefaults(){return {font:"mono",size:12,width:72,align:"center",header:"",footer:"Good luck!",show_logo:true,logo_height:40,show_name:true,show_retailer:true,show_retailer_number:true,show_retailer_address:true,show_retailer_phone:false,show_datetime:true,bold_total:true,show_barcode:true,show_qr:false,qr_size:28,qr_prefix:"",show_jackpot:false,jackpot_mode:"auto",jackpot_text:"",jackpot_game:"",border_box:false,divider:"dashed",padding:2,line_gap:2,messages:[]}}
   saved(){return {...this.designDefaults(),...(this.s.data.settings.ticket||{})}}
   design(){if(this.s.design)return this.s.design;const base=this.saved();this.s.design={...base,messages:(base.messages||[]).map(m=>({...m,games:[...(m.games||[])]}))};return this.s.design}
   designCard(){const d=this.design(),chk=(k,l)=>`<label class="chip"><input type="checkbox" class="d-f" data-k="${k}" ${d[k]?"checked":""}> ${l}</label>`,opt=(arr,cur)=>arr.map(a=>`<option value="${a[0]}" ${String(cur)===String(a[0])?"selected":""}>${a[1]}</option>`).join("");
@@ -698,9 +784,13 @@ class LotteryPosPanel extends HTMLElement{
       <label>Size <input class="d-f" data-k="size" type="number" min="9" max="18" value="${d.size}" style="width:70px"></label>
       <label>Paper <select class="d-f" data-k="width">${opt([[48,"48 mm"],[58,"58 mm"],[72,"72 mm"],[80,"80 mm"]],d.width)}</select></label>
       <label>Align <select class="d-f" data-k="align">${opt([["center","Center"],["left","Left"]],d.align)}</select></label></div>
-    <div class="row">${chk("show_logo","Logo on top")}${chk("show_name","Lottery name")}${chk("show_retailer","Retailer")}${chk("show_datetime","Date &amp; time")}${chk("bold_total","Bold total")}</div>
+    <div class="row">${chk("show_logo","Logo on top")}${chk("show_name","Lottery name")}${chk("show_datetime","Date &amp; time")}${chk("bold_total","Bold total")}${chk("border_box","Border box")}</div>
+    <div class="row">${chk("show_retailer","Retailer name")}${chk("show_retailer_number","Retailer #")}${chk("show_retailer_address","Address")}${chk("show_retailer_phone","Phone")}</div>
     <div class="row"><label>Logo height <input class="d-f" data-k="logo_height" type="number" min="20" max="80" value="${d.logo_height||40}" style="width:70px"> px</label>
-      <span class="note">Uses the branding logo. Toggle &quot;Logo on top&quot; to show it at the top of every ticket.</span></div>
+      <label>Padding <input class="d-f" data-k="padding" type="number" min="0" max="8" value="${d.padding??2}" style="width:70px"> mm</label>
+      <label>Line gap <input class="d-f" data-k="line_gap" type="number" min="0" max="8" value="${d.line_gap??2}" style="width:70px"> px</label>
+      <label>Divider <select class="d-f" data-k="divider">${opt([["dashed","Dashed"],["solid","Solid"],["double","Double"],["none","None"]],d.divider||"dashed")}</select></label></div>
+    <div class="row"><span class="note">Ticket header uses Branding (lottery name, operator, tagline). Retailer block shows shop number / address like official lottery tickets.</span></div>
     <div class="row"><input class="d-f" data-k="header" placeholder="Header — supports {date}" value="${esc(d.header)}" maxlength="120" style="flex:1"></div>
     <div class="row"><input class="d-f" data-k="footer" placeholder="Footer — supports {date}, {name}, {amount}" value="${esc(d.footer)}" maxlength="200" style="flex:1"></div>
     <h3>Jackpot message on ticket</h3>
@@ -972,6 +1062,11 @@ class LotteryPosPanel extends HTMLElement{
         this.paint();break}
       case "mega":s.mega=s.mega===ds.v?"":ds.v;this.paint();break;
       case "editgame":s.editGame=s.editGame===ds.v?null:ds.v;this.render();break;
+      case "editret":s.editRetailer=s.editRetailer===ds.v?null:ds.v;this.render();break;
+      case "openaddgame":s.showAddGame=true;this.render();break;
+      case "closeaddgame":s.showAddGame=false;this.render();break;
+      case "openaddret":s.showAddRetailer=true;this.render();break;
+      case "closeaddret":s.showAddRetailer=false;this.render();break;
       case "scrapejb":{this.toast("Fetching indioslottery.com…");const r=await this.call("scrape_indios",{});
         if(r){s.scrapeResult=r;s.data=await this.ws("state");
           const n=(r.imported||[]).length,w=(r.imported||[]).reduce((a,x)=>a+(x.winners||0),0);
@@ -1115,9 +1210,24 @@ class LotteryPosPanel extends HTMLElement{
       case "glogoclear":s.glogos[ds.v]="";this.toast("Logo is removed when you press Save");break;
       case "delgame":{if(!await this.modal({title:"Delete game?",text:"Only possible if it has no sales. Otherwise hide it instead.",ok:"Delete"}))break;if(await this.call("delete_game",{game_id:String(ds.v)})){s.data=await this.ws("state");this.toast("Game deleted");this.render()}break}
       case "savebt":{const r=this.shadowRoot.querySelector(`.btr[data-k="${ds.v}"]`);if(!r)break;if(await this.call("update_bet_type",{key:ds.v,label:r.querySelector(".b-label").value,multiplier:+r.querySelector(".b-mult").value,min_stake:+r.querySelector(".b-min").value,max_stake:+r.querySelector(".b-max").value,enabled:r.querySelector(".b-en").checked})){s.data=await this.ws("state");this.toast("Bet type saved");this.render()}break}
-      case "saveticker":{const q=x=>this.shadowRoot.querySelector(x);if(await this.call("set_ticker",{text:q("#tt").value,enabled:q("#te").checked,speed:+q("#ts").value,color:q("#tc").value})){s.data=await this.ws("state");this.toast("Message saved");this.render()}break}
+      case "saveticker":{const q=x=>this.shadowRoot.querySelector(x);
+        const messages=[...this.shadowRoot.querySelectorAll(".sched-row")].map((row,i)=>({
+          id:"m"+(i+1),
+          text:row.querySelector(".tm-text")?.value||"",
+          enabled:!!row.querySelector(".tm-en")?.checked,
+          start_at:row.querySelector(".tm-start")?.value||"",
+          end_at:row.querySelector(".tm-end")?.value||"",
+        })).filter(m=>m.text.trim());
+        if(await this.call("set_ticker",{text:q("#tt").value,enabled:q("#te").checked,speed:+q("#ts").value,color:q("#tc").value,messages})){s.data=await this.ws("state");this.toast("Messages saved");this.render()}break}
+      case "addsched":{
+        const t=s.data.settings.ticker||(s.data.settings.ticker={text:"",enabled:true,speed:5,color:"#39ff14",messages:[]});
+        t.messages=t.messages||[];t.messages.push({id:"m"+Date.now(),text:"",enabled:true,start_at:"",end_at:""});
+        this.render();break}
+      case "rmsched":{
+        const t=s.data.settings.ticker;if(!t||!t.messages)break;
+        t.messages=t.messages.filter((_,i)=>i!==+ds.v);this.render();break}
       case "clearlogo":s.nameDraft=this.shadowRoot.querySelector("#bn")?.value;s.logoDraft="";this.render();break;
-      case "savebrand":{const q=x=>this.shadowRoot.querySelector(x).value;const logo=s.logoDraft!==undefined?s.logoDraft:s.data.settings.logo;if(await this.call("set_branding",{name:q("#bn"),logo})){s.data=await this.ws("state");s.logoDraft=undefined;s.nameDraft=undefined;this.toast("Branding saved");this.render()}break}
+      case "savebrand":{const q=x=>this.shadowRoot.querySelector(x)?.value??"";const logo=s.logoDraft!==undefined?s.logoDraft:s.data.settings.logo;if(await this.call("set_branding",{name:q("#bn"),logo,operator:q("#bop"),tagline:q("#btag"),license_text:q("#blic")})){s.data=await this.ws("state");s.logoDraft=undefined;s.nameDraft=undefined;s.operatorDraft=undefined;s.taglineDraft=undefined;s.licenseDraft=undefined;this.toast("Branding saved");this.render()}break}
       case "saveres":{const q=x=>{const el=this.shadowRoot.querySelector(x);return el?el.value:""};const dt=q("#rd");const sessEl=this.shadowRoot.querySelector("#rsess");const payload={game:q("#rg"),date:dt,numbers:[q("#r1"),q("#r2"),q("#r3")].filter(Boolean)};if(sessEl&&sessEl.value)payload.session=sessEl.value;const r=await this.call("set_results",payload);if(r){this.toast(`Settled - ${r.winners.length} winning ticket(s)`);s.rf=!s.rf||dt<s.rf?dt:s.rf;s.rt=!s.rt||dt>s.rt?dt:s.rt;await this.loadResults()}break}
       case "runreport":case "printreport":{const q=x=>this.shadowRoot.querySelector(x).value;s.rpf=q("#f");s.rpt=q("#t");const r=await this.call("report",{date_from:s.rpf,date_to:s.rpt});if(!r)break;s.report=r;if(a==="printreport")this.print(this.reportHTML(r));else this.render();break}
       case "csv":{const r=s.report;if(!r)return this.toast("Run the report first",1);const L=[["Number","Retailer","Tickets","Plays","Sales","Sell commission","Redeem commission","Total commission","Prizes","Paid","Unpaid","Net"],...r.rows.map(x=>[x.number||"",x.retailer,x.tickets,x.lines,x.sales,x.commission_sell??x.commission,x.commission_redeem||0,x.commission,x.prizes,x.paid,x.unpaid,x.net]),[],["Game","Tickets","Sales","Prizes","Net"],...r.games.map(x=>[x.game,x.tickets,x.sales,x.prizes,x.net]),[],["Totals"],...Object.entries(r.totals)];const csv=L.map(row=>row.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(",")).join("\n"),el=document.createElement("a");el.href=URL.createObjectURL(new Blob([csv],{type:"text/csv"}));el.download=`lottery-report-${r.from}_${r.to}.csv`;el.click();break}
@@ -1192,16 +1302,16 @@ class LotteryPosPanel extends HTMLElement{
           last_name:q("#rn-ln"),
           address:q("#rn-addr"),
           phone:q("#rn-ph"),
-          commission_sell:parseFloat(q("#rc"))||0,
-          commission_redeem:parseFloat(q("#rc-r"))||0,
+          commission_sell:parseFloat(q("#rn-cs"))||10,
+          commission_redeem:parseFloat(q("#rn-cr"))||0,
           active:true
         };
         const r=await this.call("add_retailer",payload);
-        if(r){s.data=await this.ws("state");this.toast("Retailer added");this.render()}
+        if(r){s.showAddRetailer=false;s.data=await this.ws("state");this.toast("Retailer added");this.render()}
         break}
       case "addgame":{const q=x=>this.shadowRoot.querySelector(x)?.value??"";
         if(!q("#gn").trim())return this.toast("Enter a game name",1);
-        if(await this.call("add_game",{name:q("#gn"),color:q("#gc"),draw_time:q("#gt"),cutoff:q("#gk"),logo:s.gameLogo||q("#gl"),format:q("#gf")||"digit",digits:+q("#gd")||4,main_count:+q("#gmc")||5,main_max:+q("#gmm")||30,mega_count:+q("#gmega")||0,mega_max:+q("#gmx")||15})){s.gameLogo="";s.data=await this.ws("state");this.toast("Game added");this.render()}break}
+        if(await this.call("add_game",{name:q("#gn"),color:q("#gc"),draw_time:q("#gt")||"13:00",cutoff:q("#gk")||"12:45",logo:s.gameLogo||"",format:q("#gf")||"digit",digits:q("#gf")==="whe"?2:+q("#gd")||4,main_count:+q("#gmc")||5,main_max:+q("#gmm")||30,mega_count:+q("#gmega")||0,mega_max:+q("#gmx")||15})){s.gameLogo="";s.showAddGame=false;s.data=await this.ws("state");this.toast("Game added");this.render()}break}
     }}
 
   async scanned(id){if(!id)return;id=(String(id).match(/\d{12,}$/)||[String(id)])[0];const s=this.s,cur=s.data.currency;s.scan="";

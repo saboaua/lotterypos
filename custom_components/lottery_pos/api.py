@@ -125,12 +125,14 @@ def _add_r(s, m): return s.add_retailer(m)
 }, admin=True)
 def _add_g(s, m): return s.add_game(m)
 
-@_cmd("set_branding", {vol.Required("name"): str, vol.Optional("logo", default=""): str}, admin=True)
-def _brand(s, m): return s.set_branding(m["name"], m["logo"])
+@_cmd("set_branding", {vol.Required("name"): str, vol.Optional("logo", default=""): str,
+                     vol.Optional("operator", default=""): str, vol.Optional("tagline", default=""): str,
+                     vol.Optional("license_text", default=""): str}, admin=True)
+def _brand(s, m): return s.set_branding(m["name"], m["logo"], m.get("operator",""), m.get("tagline",""), m.get("license_text",""))
 
 @_cmd("set_ticker", {vol.Required("text"): str, vol.Required("enabled"): bool, vol.Required("speed"): vol.Coerce(int),
-                     vol.Required("color"): str}, admin=True)
-def _ticker(s, m): return s.set_ticker(m["text"], m["enabled"], m["speed"], m["color"])
+                     vol.Required("color"): str, vol.Optional("messages", default=[]): list}, admin=True)
+def _ticker(s, m): return s.set_ticker(m["text"], m["enabled"], m["speed"], m["color"], m.get("messages") or [])
 
 # NOTE: never use schema key "id" — it collides with the WebSocket message id (int).
 @_cmd("update_game", {

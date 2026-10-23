@@ -6,7 +6,7 @@ PANEL_URL = "lottery-pos"
 STATIC_URL = "/lottery_pos_static/lottery-panel.js"
 SIGNAL_UPDATE = f"{DOMAIN}_update"
 PLATFORMS = ["sensor"]
-VERSION = "0.9.5"
+VERSION = "0.9.6"
 
 # Western zodiac signs (Aries … Pisces)
 ZODIAC_SYMBOLS = [
@@ -113,10 +113,12 @@ DEFAULT_BET_TYPES = [
 
 TICKET_DEFAULTS = {
     "font": "mono", "size": 12, "width": 72, "align": "center", "header": "", "footer": "Good luck!",
-    "show_logo": True, "logo_height": 40, "show_name": True, "show_retailer": True, "show_datetime": True,
-    "bold_total": True, "show_barcode": True, "show_qr": False, "qr_size": 28, "qr_prefix": "",
-    "show_jackpot": False, "jackpot_mode": "auto", "jackpot_text": "", "jackpot_game": "",
-    "messages": [],
+    "show_logo": True, "logo_height": 40, "show_name": True, "show_retailer": True,
+    "show_retailer_number": True, "show_retailer_address": True, "show_retailer_phone": False,
+    "show_datetime": True, "bold_total": True, "show_barcode": True, "show_qr": False,
+    "qr_size": 28, "qr_prefix": "", "show_jackpot": False, "jackpot_mode": "auto",
+    "jackpot_text": "", "jackpot_game": "", "border_box": False, "divider": "dashed",
+    "padding": 2, "line_gap": 2, "messages": [],
 }
 
 DEFAULT_PROMOTIONS = [
