@@ -252,6 +252,36 @@ table{width:100%;border-collapse:collapse;font-size:13px}td,th{padding:9px 6px;b
 button{cursor:pointer;border:none;font-family:inherit}
 .office input:not([type=color]):not([type=file]):not([type=checkbox]),.office select{transition:border-color .15s,box-shadow .15s}
 @media(max-width:620px){.shell{flex-direction:column-reverse}.nav{width:100%;flex-direction:row;justify-content:space-around;padding:6px}.nav .logo{display:none}.nav button{width:auto;flex:1}#scan{width:100%}}
+.login{height:100%;min-height:100vh;display:grid;place-items:center;background:var(--bg);padding:20px}
+.lbox{width:min(360px,100%);background:var(--card);border-radius:24px;padding:28px 26px;box-shadow:var(--sh);display:flex;flex-direction:column;gap:12px;text-align:center}
+.lbox h2{margin:6px 0 0;font-size:24px}.lbox label{text-align:left;font-size:12px;font-weight:700;color:var(--mut);display:flex;flex-direction:column;gap:5px}
+.lbox input{height:46px;border:1px solid var(--line);background:var(--key);border-radius:14px;padding:0 14px;font-size:16px}
+.lico{width:64px;height:64px;border-radius:20px;margin:0 auto;background:linear-gradient(135deg,var(--pri),var(--pri2));color:#fff;display:grid;place-items:center}.lico ha-icon{--mdc-icon-size:34px}
+.lgo{height:48px;background:linear-gradient(135deg,var(--pri),var(--pri2));color:#fff;font-size:16px;margin-top:4px}.lgo:disabled{opacity:.6}
+.lerr{min-height:18px;color:var(--bad);font-size:13px;font-weight:600}
+.who{display:flex;align-items:center;gap:6px;background:var(--card);padding:0 14px;height:44px;border-radius:14px;box-shadow:var(--sh);font-weight:700;white-space:nowrap}.who ha-icon{--mdc-icon-size:20px;color:var(--pri)}
+.fl{display:flex;flex-direction:column;gap:4px;font-size:11px;font-weight:700;color:var(--mut);text-transform:uppercase;letter-spacing:.04em}
+.fl input,.fl select{height:42px;border:1px solid var(--line);background:var(--key);border-radius:12px;padding:0 12px;text-transform:none;letter-spacing:0;font-size:14px;color:var(--ink)}
+.warn{margin:6px 0;padding:10px 12px;border-radius:12px;background:#f59e0b22;color:#b45309;font-weight:600;font-size:13px}
+.sess-sel{display:flex;gap:8px;flex-wrap:wrap}
+.sess-sel button{min-width:104px;text-align:left}
+.opd-box{border:1px dashed var(--line);border-radius:14px;padding:10px;margin:8px 0}
+.wgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:8px;margin:8px 0}
+.wgrid label{display:flex;flex-direction:column;gap:3px;font-size:12px;font-weight:700;color:var(--mut)}.wgrid select{height:38px;border:1px solid var(--line);border-radius:10px;background:var(--key);padding:0 8px;color:var(--ink)}
+table.wk td,table.wk th{text-align:center;padding:6px 8px;border-bottom:1px solid var(--line);font-size:13px}table.wk td.off{color:var(--mut);opacity:.5}
+.lmapwrap{height:400px;border-radius:14px;overflow:hidden;position:relative;background:var(--key)}
+.lpin{display:grid;place-items:center;width:30px;height:30px;border-radius:50%;color:#fff;font-size:11px;font-weight:800;border:2px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.4)}
+.lpin.on{background:#10b981}.lpin.off{background:#f43f5e;opacity:.85}
+.cal{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:14px}
+.cal-m h5{margin:0 0 6px;font-size:14px}.cal-g{display:grid;grid-template-columns:repeat(7,1fr);gap:3px}
+.cal-h{text-align:center;font-size:10px;color:var(--mut)}
+.cal-d{min-height:36px;border-radius:8px;background:var(--key);padding:2px 4px;font-size:11px;display:flex;flex-direction:column;justify-content:space-between}
+.cal-d.hol{background:#f43f5e33;outline:1.5px solid #f43f5e}.cal-d.none{opacity:.4}
+.dots{display:flex;flex-wrap:wrap;gap:2px}.dots i,.cal-leg i{display:inline-block;width:7px;height:7px;border-radius:50%}
+.cal-leg{display:flex;flex-wrap:wrap;gap:12px;font-size:12px;color:var(--mut);margin:6px 0 10px}.cal-leg i{margin-right:4px}.cal-leg i.h{background:#f43f5e}
+.hol-add{margin:10px 0}
+.leaflet-container{font:inherit}.leaflet-popup-content button{background:var(--pri,#6366f1);color:#fff;padding:6px 10px;border-radius:8px}
+
 `;
 
 class LotteryPosPanel extends HTMLElement{
@@ -261,11 +291,11 @@ class LotteryPosPanel extends HTMLElement{
   connectedCallback(){window.addEventListener("keydown",this._kh)}
   disconnectedCallback(){window.removeEventListener("keydown",this._kh);clearInterval(this._tm)}
   set hass(h){const first=!this._hass;this._hass=h;if(first)this.init()}
-  set narrow(v){}set panel(v){}set route(v){}
-  ws(type,extra={}){return this._hass.callWS({type:"lottery_pos/"+type,...extra})}
+  set narrow(v){}set panel(v){this._mode=(v&&v.config&&v.config.mode)||"sell"}set route(v){}
+  ws(type,extra={}){return this._hass.callWS({type:"lottery_pos/"+type,token:this.s.token||undefined,...extra})}
   async init(){const s=this.s;try{s.dark=localStorage.getItem("lottery_pos_dark")==="1"}catch(e){}
-    s.data=await this.ws("state");this._tm=setInterval(()=>this.tick(),30000);s.sel=[s.data.games[0]?.id];s.bt=s.data.bet_types[0]?.key;s.retailer=s.data.retailers[0]?.id;
-    this.shadowRoot.addEventListener("click",e=>{const el=e.target.closest("[data-a]");if(!el)return;if(el.dataset.a==="rmprizerow"||el.dataset.a==="rmnprizerow"){const row=el.closest(".p-prize-row,.n-prize-row");if(row){const box=row.parentElement;if(box&&box.querySelectorAll(".p-prize-row,.n-prize-row").length>1)row.remove();else this.toast("Keep at least one prize row",1)}return}
+    s.mode=this._mode||"sell";this._last=Date.now();this._tm=setInterval(()=>this.tick(),30000);try{s.token=sessionStorage.getItem(this.sessionKey())||""}catch(e){}if(s.token){try{s.me=await this.ws("whoami");await this.enter()}catch(e){this.clearSession()}}
+    this.shadowRoot.addEventListener("click",e=>{this._last=Date.now();const el=e.target.closest("[data-a]");if(!el)return;if(el.dataset.a==="rmprizerow"||el.dataset.a==="rmnprizerow"){const row=el.closest(".p-prize-row,.n-prize-row");if(row){const box=row.parentElement;if(box&&box.querySelectorAll(".p-prize-row,.n-prize-row").length>1)row.remove();else this.toast("Keep at least one prize row",1)}return}
       if(el.dataset.a==="rmjprize"){const row=el.closest(".jp-row");if(row)row.remove();return}
       if(el.dataset.a==="rmtmsg"){const row=el.closest(".tmsg-row");if(row){const d=this.design();const i=+row.dataset.i;if(d.messages&&!isNaN(i)){d.messages.splice(i,1);this.render()}else row.remove()}return}this.act(el.dataset.a,el.dataset)});
     this.render()}
@@ -290,45 +320,35 @@ class LotteryPosPanel extends HTMLElement{
     m.innerHTML=`<div class="mbox ${tone}"><h3>${title}</h3>${big?`<div class="big">${big}</div>`:""}<p>${text}</p>${input?`<input id="mi" placeholder="${input}" inputmode="numeric">`:""}<div class="mrow"><button class="ghost" data-x="0">Cancel</button><button class="primary" data-x="1">${ok}</button></div></div>`;
     const done=v=>{m.remove();res(v)};m.onclick=e=>{const x=e.target.dataset.x;if(x==="0"||e.target===m)done(null);else if(x==="1")done(input?m.querySelector("#mi").value.trim():true)};
     m.querySelector("#mi")?.addEventListener("keydown",e=>{if(e.key==="Enter")done(e.target.value.trim())});this.shadowRoot.append(m);setTimeout(()=>m.querySelector("#mi")?.focus(),60)})}
-  cd(g){const s=this.s,t=today(),wd=(new Date(s.date+"T12:00:00").getDay()+6)%7;if(g.draw_days?.length&&!g.draw_days.includes(wd))return{open:0,txt:`No draw ${DAYS[wd]}`};if(s.date>t)return{open:1,txt:"Open"};if(s.date<t)return{open:0,txt:"Closed"};const n=new Date(),nm=n.getHours()*60+n.getMinutes(),[oh,om]=(g.open_time||"00:00").split(":");if(nm<oh*60+ +om)return{open:0,txt:`Opens ${g.open_time}`};
-    // When game has sessions: open if ANY session still open (so the game chip stays usable)
-    const ss=g.sessions||[];
-    let cutoff=g.cutoff;
-    if(ss.length){
-      const openSess=ss.filter(x=>{const [h,m]=(x.cutoff||"23:59").split(":");return nm<(+h*60+ +m)});
-      if(!openSess.length)return{open:0,txt:"Closed"};
-      // show nearest closing session
-      const next=openSess[0];cutoff=next.cutoff;
-      const [h,m]=cutoff.split(":"),d=h*60+ +m-nm;
-      return{open:1,txt:d>=60?`${next.label} · ${Math.floor(d/60)}h ${d%60}m`:`${next.label} · ${d}m`};
-    }
-    const [h,m]=cutoff.split(":"),d=h*60+ +m-nm;return d<=0?{open:0,txt:"Closed"}:{open:1,txt:d>=60?`Closes in ${Math.floor(d/60)}h ${d%60}m`:`Closes in ${d}m`}}
-  tick(){const s=this.s;if(!s.data||s.tab!=="sell")return;let sig="";for(const g of s.data.games){const c=this.cd(g);sig+=c.open?1:0;const el=this.shadowRoot.querySelector(`[data-cd="${g.id}"]`);if(el)el.textContent=c.txt}if(sig!==this._sig)this.render()}
-  async call(type,extra){try{return await this.ws(type,extra)}catch(e){this.toast(e.message||"Error",1);return null}}
+  async call(type,extra){try{return await this.ws(type,extra)}catch(e){if(e&&e.code==="auth_required"){this.dropSession("Session expired - please sign in again");return null}this.toast(e.message||"Error",1);return null}}
 
   shrink(file,max=240){return new Promise((res,rej)=>{const img=new Image(),u=URL.createObjectURL(file);img.onload=()=>{const k=Math.min(1,max/Math.max(img.width,img.height)),c=document.createElement("canvas");c.width=Math.round(img.width*k);c.height=Math.round(img.height*k);c.getContext("2d").drawImage(img,0,0,c.width,c.height);URL.revokeObjectURL(u);res(c.toDataURL("image/png"))};img.onerror=()=>rej(new Error("Not an image"));img.src=u})}
-  render(){const s=this.s;if(!s.data)return;this.classList.toggle("dark",!!s.dark);const d=s.data,st=d.settings,admin=!!this._hass.user?.is_admin;
-    if(!admin&&s.tab!=="sell")s.tab="sell";
-    const items=[["sell","mdi:cash-register","Sell",1],["office","mdi:cog","Back office",admin]];
-    const nav=items.filter(i=>i[3]).map(i=>`<button class="${s.tab===i[0]?"on":""}" data-a="tab" data-v="${i[0]}"><ha-icon icon="${i[1]}"></ha-icon>${i[2]}</button>`).join("");
+  render(){const s=this.s;if(!s.token||!s.me||!s.data)return this.renderLogin();this.classList.toggle("dark",!!s.dark);const d=s.data,st=d.settings,office=s.mode==="office";
+    s.tab=office?"office":"sell";
+    const items=[["sell","mdi:cash-register","Sell",!office],["office","mdi:cog","Back office",office]];
+    const nav=items.filter(i=>i[3]).map(i=>`<button class="${s.tab===i[0]?"on":""}" data-a="tab" data-v="${i[0]}"><ha-icon icon="${i[1]}"></ha-icon>${i[2]}</button>`).join("")+`<button data-a="logout" style="margin-top:auto"><ha-icon icon="mdi:logout"></ha-icon>Sign out</button>`;
     const body=(s.tab==="sell"?this.sellHTML():`${this.subTabs()}<div class="office">${this.officeBody()}</div>`)+(this._modal||"");
-    this.shadowRoot.innerHTML=`<style>${CSS}</style><div class="shell"><nav class="nav"><div class="logo">${st.logo?`<img src="${st.logo}">`:esc((st.name||"L").slice(0,2).toUpperCase())}</div>${nav}</nav><div class="content"><div class="top">
+    this.shadowRoot.innerHTML=`<style>${CSS}${this._lcss||""}</style><div class="shell"><nav class="nav"><div class="logo">${st.logo?`<img src="${st.logo}">`:esc((st.name||"L").slice(0,2).toUpperCase())}</div>${nav}</nav><div class="content"><div class="top">
       <span class="brand">${esc(st.name)}</span>${this.tickerHTML()||`<span style="flex:1"></span>`}
       <div class="kpi"><span>Sales today</span><b>${d.currency} ${fmt(d.summary.sales_today)}</b></div><div class="kpi"><span>Tickets</span><b>${d.summary.tickets_today}</b></div>
-      <input id="scan" placeholder="Scan ticket…" value="${esc(s.scan)}" inputmode="numeric">
-      <button class="ic" data-a="replay" title="Replay last ticket"><ha-icon icon="mdi:replay"></ha-icon></button>
-      <select id="ret">${d.retailers.map(r=>`<option value="${r.id}" ${r.id===s.retailer?"selected":""}>${r.number?r.number+" · ":""}${r.name}</option>`).join("")}</select>
+      ${office?"":`<input id="scan" placeholder="Scan ticket…" value="${esc(s.scan)}" inputmode="numeric">`}
+      ${office?"":`<button class="ic" data-a="replay" title="Replay last ticket"><ha-icon icon="mdi:replay"></ha-icon></button>`}
+      <span class="who"><ha-icon icon="${office?"mdi:shield-account":"mdi:store"}"></ha-icon>${esc(s.me.name||"")}</span>
       <button class="ic" data-a="theme" title="Dark / light"><ha-icon icon="${s.dark?"mdi:weather-sunny":"mdi:weather-night"}"></ha-icon></button></div>${body}</div></div>`;
     const q=x=>this.shadowRoot.querySelector(x);
-    q("#scan").oninput=e=>s.scan=e.target.value;
-    q("#scan").onkeydown=e=>{if(e.key==="Enter")this.scanned(e.target.value.trim())};
-    q("#ret").onchange=e=>s.retailer=e.target.value;
-    if(q("#date"))q("#date").onchange=e=>s.date=e.target.value;
+    if(q("#scan")){q("#scan").oninput=e=>s.scan=e.target.value;
+    q("#scan").onkeydown=e=>{if(e.key==="Enter")this.scanned(e.target.value.trim())}}
+    if(q("#date"))q("#date").onchange=e=>{s.date=e.target.value;s.dateAuto=false;this.render()};
     if(q("#logofile"))q("#logofile").onchange=async e=>{const f=e.target.files[0];if(!f)return;try{s.nameDraft=q("#bn").value;s.logoDraft=await this.shrink(f);this.render()}catch(x){this.toast(x.message,1)}};
     if(q("#gfile"))q("#gfile").onchange=async e=>{const f=e.target.files[0];if(!f)return;try{s.gameLogo=await this.shrink(f,96);this.toast("Game logo ready - press Add")}catch(x){this.toast(x.message,1)}};
     this.shadowRoot.querySelectorAll(".f-file").forEach(inp=>inp.onchange=async e=>{const f=e.target.files[0];if(!f)return;try{s.glogos[inp.dataset.id]=await this.shrink(f,96);this.toast("Logo ready - press Save on the game")}catch(x){this.toast(x.message,1)}});
     this.shadowRoot.querySelectorAll(".d-f").forEach(el=>{const h=()=>{const k=el.dataset.k,d=this.design();d[k]=el.type==="checkbox"?el.checked:["size","qr_size","width","logo_height"].includes(k)?+el.value:el.value;this.refreshPreview()};el.addEventListener("input",h);el.addEventListener("change",h)});
     this.refreshPreview();this.paint();
+    this.shadowRoot.querySelectorAll(".rn").forEach(el=>el.addEventListener("input",()=>{el.value=el.value.replace(/\D/g,"").slice(0,+el.dataset.dig)}));
+    this.shadowRoot.querySelectorAll(".f-opd").forEach(cb=>cb.onchange=()=>{const c=cb.closest(".gcard");c.querySelector(".wgrid").style.display=cb.checked?"grid":"none";c.querySelector(".days-row").style.display=cb.checked?"none":""});
+    const rgs=q("#rg");if(rgs){rgs.onchange=()=>{s.rg=rgs.value;s.rsess="";this.render()};q("#rd").onchange=e=>s.rd=e.target.value;if(q("#rsess"))q("#rsess").onchange=e=>s.rsess=e.target.value}
+    const cg=q("#calgame");if(cg)cg.onchange=()=>{s.calGame=cg.value;this.render()};
+    if(s.tab==="office"&&s.sub==="retailers")this.mountMap();
     const pg=this.shadowRoot.querySelector("#preview-game");
     if(pg){if(!this.s.previewGame)this.s.previewGame=pg.value;pg.onchange=()=>{this.s.previewGame=pg.value;this.refreshPreview()}}
     // live MOTD preview while editing message fields
@@ -443,10 +463,10 @@ class LotteryPosPanel extends HTMLElement{
       }
     }
 
-    this._sig=d.games.map(g=>this.cd(g).open?1:0).join("");
+    this.autoDraw();this._sig=d.games.map(g=>this.cd(g).open?1:0).join("");
     const ok=this.allowedBTs();if(ok.length&&!ok.find(b=>b.key===s.bt)){s.bt=ok[0].key;s.num=s.num.slice(0,ok[0].digits||this.gameDigits(this.primaryGame()))}
-    const games=d.games.map(g=>{const c=this.cd(g);const fmt=this.gameFormat(g);const tag=fmt==="digit"?`${g.digits||4}d`:fmt==="whe"?"1–36":fmt;return `<button class="game ${s.sel.includes(g.id)?"on":""} ${c.open?"":"closed"}" style="--c:${g.color}" data-a="game" data-v="${g.id}"><span class="gi">${g.logo?`<img src="${g.logo}">`:esc(g.name[0])}</span><b>${esc(g.name)}</b><small class="fmt-tag">${tag}</small><small>Draw ${g.draw_time}${g.draw_days?.length&&g.draw_days.length<7?" · "+g.draw_days.map(i=>DAYS[i]).join(" "):""}</small><small data-cd="${g.id}">${c.txt}</small><span class="chk">✓</span></button>`}).join("");
-    const acts=[["quick","mdi:dice-multiple","Quick pick"],["last","mdi:receipt-text-outline","Último"],["copy","mdi:content-copy","Copia"],["clear","mdi:delete-sweep-outline","Clear"],["cancel","mdi:cancel","Cancel"],["redeem","mdi:cash-check","Redeem"],["results","mdi:printer","Resultado"],["report1","mdi:file-chart-outline","My report"],["clerks","mdi:account-group-outline","Clerks"],["support","mdi:lifebuoy","Support"]];
+    const games=d.games.map(g=>{const c=this.cd(g);const fmt=this.gameFormat(g);const tag=fmt==="digit"?`${g.digits||4}d`:fmt==="whe"?"1–36":fmt;return `<button class="game ${s.sel.includes(g.id)?"on":""} ${c.open?"":"closed"}" style="--c:${g.color}" data-a="game" data-v="${g.id}"><span class="gi">${g.logo?`<img src="${g.logo}">`:esc(g.name[0])}</span><b>${esc(g.name)}</b><small class="fmt-tag">${tag}</small><small>${g.one_per_day?"1 draw / day":`Draw ${g.draw_time}${g.draw_days?.length&&g.draw_days.length<7?" · "+g.draw_days.map(i=>DAYS[i]).join(" "):""}`}</small><small data-cd="${g.id}">${c.txt}</small><span class="chk">✓</span></button>`}).join("");
+    const acts=[["quick","mdi:dice-multiple","Quick pick"],["last","mdi:receipt-text-outline","Último"],["copy","mdi:content-copy","Copia"],["clear","mdi:delete-sweep-outline","Clear"],["cancel","mdi:cancel","Cancel"],["redeem","mdi:cash-check","Redeem"],["results","mdi:printer","Resultado"],["report1","mdi:file-chart-outline","My report"],["clerks","mdi:account-group-outline","Clerks"],["support","mdi:lifebuoy","Support"],["password","mdi:key-variant","Password"]];
     return `<div class="main"><section class="left card">
     <div class="games">${games}</div>
     <div class="ctl"><input type="date" id="date" value="${s.date}" min="${today()}"><div class="bts">${ok.map(b=>`<button class="bt ${b.key===s.bt?"on":""}" data-a="bt" data-v="${b.key}">${b.label}</button>`).join("")}</div></div>
@@ -467,22 +487,24 @@ class LotteryPosPanel extends HTMLElement{
   async loadResults(){const s=this.s;s.rf=s.rf||ago(6);s.rt=s.rt||today();const r=await this.call("results_summary",{date_from:s.rf,date_to:s.rt});if(r)s.rs=r;this.render()}
   resultsHTML(){const s=this.s,d=s.data,cur=d.currency,r=s.rs,lab={redeemed:["paid","Paid"],won:["unpaid","Unpaid"],active:["pending","Pending"]};
     const badge=x=>`<span class="st ${(lab[x]||["pending",x])[0]}">${(lab[x]||["",x])[1]}</span>`;
-    const g0=d.all_games.find(g=>g.id===(s.rg||d.all_games[0]?.id))||d.all_games[0];
+    const g0=d.all_games.find(g=>g.id===(s.rg||d.all_games[0]?.id))||d.all_games[0];if(g0&&!s.rg)s.rg=g0.id;
     const sess=(g0&&g0.sessions)||[];
+    const lf=d.settings.last_fetch||{},sr=s.scrapeResult;
     const form=`<div class="card"><h3>Enter draw results</h3>
-      <div class="row"><select id="rg">${d.all_games.map(g=>`<option value="${g.id}" ${g.id===(s.rg||"")?"selected":""}>${esc(g.name)}</option>`).join("")}</select>
-      <input type="date" id="rd" value="${s.rd||today()}">
-      ${sess.length?`<select id="rsess">${sess.map(x=>`<option value="${esc(x.id)}" ${x.id===(s.rsess||"")?"selected":""}>${esc(x.label)} (${x.draw_time})</option>`).join("")}</select>`:""}</div>
-      <div class="row"><input id="r1" maxlength="6" placeholder="${(g0&&g0.format)==="whe"?"Mark 1–36":"1st"}" size="6" inputmode="numeric"><input id="r2" maxlength="4" placeholder="2nd" size="5" inputmode="numeric"><input id="r3" maxlength="4" placeholder="3rd" size="5" inputmode="numeric"></div>
+      <div class="row"><select id="rg">${d.all_games.map(g=>`<option value="${g.id}" ${g.id===(g0&&g0.id)?"selected":""}>${esc(g.name)}</option>`).join("")}</select>
+      <input type="date" id="rd" value="${s.rd||today()}" max="${today()}">
+      ${sess.length?`<select id="rsess">${sess.map(x=>`<option value="${esc(x.id)}" ${x.id===(s.rsess||sess[0].id)?"selected":""}>${esc(x.label)} (${x.draw_time})</option>`).join("")}</select>`:""}</div>
+      ${g0?this.resultFieldsHTML(g0):""}
       <button data-a="saveres">Save &amp; settle</button>
-      <p class="note">${(g0&&g0.format)==="whe"?"Play Whe: enter the winning mark (1–36).":(g0&&g0.format)==="zodiac"?"Zodiac: number then symbol id.":"Digit games: 1st / 2nd / 3rd prize."}</p></div>
-      <div class="card"><h3>Import from indioslottery.com</h3>
-        <p class="note">Scrapes the latest published winning numbers and settles matching local games (name match). Use to validate tickets against official results.</p>
-        <div class="row"><button data-a="scrapejb">Fetch results from indioslottery.com</button></div>
-        ${s.scrapeResult?`<div class="note" style="margin-top:10px"><b>Date ${esc(s.scrapeResult.date||"")}</b><br>
-          Imported: ${(s.scrapeResult.imported||[]).map(x=>`${esc(x.game)} [${(x.numbers||[]).join(", ")}] → ${x.winners} winner(s)`).join("<br>")||"none"}
-          ${(s.scrapeResult.skipped||[]).length?`<br>Skipped: ${s.scrapeResult.skipped.map(x=>esc(x.name)+` (${esc(x.reason)})`).join(", ")}`:""}
-        </div>`:""}</div>`;
+      <p class="note">Results can only be entered after the draw's cut-off. Digits are checked against the game (${g0&&(g0.format||"digit")==="digit"?(g0.digits||4)+" digits":(g0&&g0.format)||""}).</p></div>
+      <div class="card"><h3>Published results</h3>
+        <p class="note">Winning numbers are imported automatically a few minutes after each draw closes (every 10 min while something is missing). Use the button to fetch right now.</p>
+        <div class="row"><button data-a="scrapejb">Fetch results now</button><label class="chip"><input type="checkbox" id="autores" data-a="saveauto" ${d.settings.auto_results!==false?"checked":""}> Automatic fetch</label></div>
+        ${lf.at?`<p class="note">Last fetch ${esc(lf.at.replace("T"," ").slice(0,16))} · imported <b>${lf.imported}</b> · skipped ${lf.skipped}${(lf.errors||[]).length?` · <span style="color:var(--bad)">${lf.errors.length} error(s)</span>`:""}</p>`:""}
+        ${sr?`<div class="note" style="margin-top:6px"><b>${(sr.imported||[]).length} imported</b>${(sr.unchanged||[]).length?` · ${sr.unchanged.length} already up to date`:""}<br>
+          ${(sr.imported||[]).map(x=>`✓ ${esc(x.game)}${x.session?" "+esc(x.session):""} ${x.date} [${(x.numbers||[]).join(", ")}] → ${x.winners} winner(s)`).join("<br>")}
+          ${(sr.errors||[]).length?`<br><span style="color:var(--bad)">Source problems:<br>${sr.errors.map(esc).join("<br>")}</span>`:""}
+          ${(sr.skipped||[]).length?`<br>Skipped:<br>${sr.skipped.map(x=>`• ${esc(x.name)} — ${esc(x.reason)}`).join("<br>")}`:""}</div>`:""}</div>`;
     const kc=(l,v,c="")=>`<div class="kc"><span>${l}</span><b class="${c}">${v}</b></div>`;
     const kp=r?`<div class="kpis">${kc("Winning tickets",r.totals.winners)}${kc("Prizes won ("+cur+")",fmt(r.totals.prizes))}${kc("Paid",fmt(r.totals.paid),"pos")}${kc("Unpaid liability",fmt(r.totals.unpaid),r.totals.unpaid>0?"neg":"")}</div>`:"";
     const draws=!r?`<div class="empty">Loading…</div>`:r.draws.length?`<table><tr><th>Game</th><th>Date</th><th>Numbers</th><th>Tickets</th><th>Winners</th><th>Sales</th><th>Prizes</th></tr>${r.draws.map(x=>`<tr><td>${esc(x.game_name)}</td><td>${x.date}</td><td>${x.numbers.join(" · ")}</td><td>${x.tickets}</td><td><b>${x.winners}</b></td><td>${fmt(x.sales)}</td><td>${fmt(x.prizes)}</td></tr>`).join("")}</table>`:`<div class="empty">No results entered in this range</div>`;
@@ -495,9 +517,9 @@ class LotteryPosPanel extends HTMLElement{
       <p class="note">Open exposure = the most you could owe on draws that have no results yet if every open play won.</p>
       <h4>By retailer</h4><table><tr><th>#</th><th>Retailer</th><th>Tickets</th><th>Plays</th><th>Sales</th><th>Sell comm.</th><th>Redeem comm.</th><th>Prizes</th><th>Unpaid</th><th>Net</th></tr>${r.rows.map(x=>`<tr><td>${esc(x.number||"")}</td><td>${esc(x.retailer)}</td><td>${x.tickets}</td><td>${x.lines}</td><td>${fmt(x.sales)}</td><td>${fmt(x.commission_sell??x.commission)}</td><td>${fmt(x.commission_redeem||0)}</td><td>${fmt(x.prizes)}</td><td>${fmt(x.unpaid)}</td><td class="${x.net>=0?"pos":"neg"}">${fmt(x.net)}</td></tr>`).join("")}</table>
       <h4>By game</h4>${r.games.length?`<table><tr><th>Game</th><th>Tickets</th><th>Sales</th><th>Prizes</th><th>Net</th></tr>${r.games.map(x=>`<tr><td>${esc(x.game)}</td><td>${x.tickets}</td><td>${fmt(x.sales)}</td><td>${fmt(x.prizes)}</td><td class="${x.net>=0?"pos":"neg"}">${fmt(x.net)}</td></tr>`).join("")}</table>`:`<div class="empty">No sales in this range</div>`}</div>`}
-  subTabs(){const s=this.s,t=[["games","mdi:calendar-clock","Games & schedule"],["brand","mdi:palette-outline","Branding & message"],["ticket","mdi:receipt-text-outline","Ticket design"],["promos","mdi:gift-outline","Promotions"],["results","mdi:trophy-outline","Results & winners"],["reports","mdi:chart-box-outline","Reports"],["retailers","mdi:store-outline","Retailers"]];
+  subTabs(){const s=this.s,t=[["games","mdi:calendar-clock","Games & schedule"],["calendar","mdi:calendar-month","Draw calendar"],["brand","mdi:palette-outline","Branding & message"],["ticket","mdi:receipt-text-outline","Ticket design"],["promos","mdi:gift-outline","Promotions"],["results","mdi:trophy-outline","Results & winners"],["reports","mdi:chart-box-outline","Reports"],["retailers","mdi:store-outline","Retailers"],["account","mdi:account-key","Account"]];
     return `<div class="subtabs">${t.map(x=>`<button class="${s.sub===x[0]?"on":""}" data-a="sub" data-v="${x[0]}"><ha-icon icon="${x[1]}"></ha-icon>${x[2]}</button>`).join("")}</div>`}
-  officeBody(){const f={games:()=>this.gamesCard()+this.btCard(),brand:()=>this.brandCard()+this.tickerCard(),ticket:()=>this.designCard(),promos:()=>this.promosCard(),results:()=>this.resultsHTML(),reports:()=>this.reportsHTML(),retailers:()=>this.retailersCard()};const body=(f[this.s.sub]||f.games)();const modals=(this.s.showAddGame?this.addGameModal():"")+(this.s.showAddRetailer?this.addRetailerModal():"");return body+modals}
+  officeBody(){const f={games:()=>this.gamesCard()+this.btCard(),brand:()=>this.brandCard()+this.tickerCard(),ticket:()=>this.designCard(),promos:()=>this.promosCard(),results:()=>this.resultsHTML(),reports:()=>this.reportsHTML(),retailers:()=>this.retailersCard(),calendar:()=>this.calendarCard(),account:()=>this.accountCard()};const body=(f[this.s.sub]||f.games)();const modals=(this.s.showAddGame?this.addGameModal():"")+(this.s.showAddRetailer?this.addRetailerModal():"");return body+modals}
   tickerCard(){const t=this.s.data.settings.ticker||{},cols=[["#39ff14","Green"],["#ffb000","Amber"],["#ff3b3b","Red"],["#ffffff","White"],["#22d3ee","Cyan"]];
     const msgs=t.messages||[];
     const sched=msgs.map((m,i)=>`<div class="sched-row" data-i="${i}">
@@ -605,7 +627,13 @@ class LotteryPosPanel extends HTMLElement{
       </div>`).join("")||`<span class="note">No sessions — single draw per day</span>`}
       <button type="button" class="ghost" data-a="addsess" data-v="${esc(g.id)}">+ Add session</button>
     </div>
-    <div class="row">${DAYS.map((n,i)=>`<label class="chip"><input type="checkbox" class="f-day" value="${i}" ${!g.draw_days?.length||g.draw_days.includes(i)?"checked":""}> ${n}</label>`).join("")}</div>
+    <div class="opd-box"><label class="chip"><input type="checkbox" class="f-opd" ${g.one_per_day?"checked":""}> One draw per day — choose Midday or Evening for each weekday</label>
+      <div class="wgrid" style="display:${g.one_per_day?"grid":"none"}">${DAYS.map((n,i)=>{const ss=(g.sessions||[]).length>=2?g.sessions:[{id:"midday",label:"Midday"},{id:"evening",label:"Evening"}];const cur=(g.week_schedule||{})[i]||"none";
+        return `<label>${n}<select class="ws-sel" data-wd="${i}"><option value="none">No draw</option>${ss.map(x=>`<option value="${esc(x.id)}" ${cur===x.id?"selected":""}>${esc(x.label)}</option>`).join("")}</select></label>`}).join("")}</div>
+      <p class="note">A weekday can only have one draw. Midday / Evening times come from the sessions above (added automatically if missing).</p></div>
+    <div class="row days-row" style="${g.one_per_day?"display:none":""}">${DAYS.map((n,i)=>`<label class="chip"><input type="checkbox" class="f-day" value="${i}" ${!g.draw_days?.length||g.draw_days.includes(i)?"checked":""}> ${n}</label>`).join("")}</div>
+    <div class="row"><label class="fl" style="flex:1">Result codes (published results)<input class="f-ext" value="${esc((g.ext_codes||[]).join(", "))}" placeholder="e.g. PHILIPSBURG_AM:am, PHILIPSBURG_PM:pm" style="width:100%"></label></div>
+    <p class="note">Only needed when the automatic result import cannot match this game by name. Use CODE or CODE:session.</p>
     <div class="row"><input type="file" class="f-file" data-id="${g.id}" accept="image/*" style="max-width:190px"><button class="ghost" data-a="glogoclear" data-v="${g.id}">Remove logo</button><span style="flex:1"></span><button data-a="savegame" data-v="${g.id}">Save game</button><button class="ghost dng" data-a="delgame" data-v="${g.id}">Delete</button></div>
   </div>`}
   btCard(){const d=this.s.data;return `<div class="card" style="grid-column:1/-1"><h3>Bet types — payout &amp; stake limits</h3>
@@ -655,91 +683,6 @@ class LotteryPosPanel extends HTMLElement{
     <div class="modal-actions"><button class="ghost" data-a="closeaddgame">Cancel</button><button data-a="addgame">Create game</button></div>
   </div></div>`}
   addGameCard(){return ""}
-  
-  retailersCard(){const s=this.s,d=s.data,openId=s.editRetailer;
-    const list=(d.all_retailers||[]).map(r=>{
-      const open=openId===r.id;
-      const person=[r.first_name,r.last_name].filter(Boolean).join(" ");
-      const cs=Number(r.commission_sell??r.commission??10),cr=Number(r.commission_redeem??0);
-      const head=`<button type="button" class="rlist-head" data-a="editret" data-v="${esc(r.id)}">
-        <span class="rnum">#${esc(r.number||"—")}</span>
-        <span class="meta"><b>${esc(r.name||"Retailer")}</b>
-          <small>${person?esc(person)+" · ":""}${r.phone?esc(r.phone)+" · ":""}Sell ${cs}% · Redeem ${cr}% · ${r.active!==false?"Active":"Off"}</small></span>
-        ${r.active!==false?`<span class="st active">Active</span>`:`<span class="st inactive">Disabled</span>`}
-        <ha-icon icon="${open?"mdi:chevron-up":"mdi:chevron-down"}"></ha-icon>
-      </button>`;
-      const body=open?`<div class="rlist-body">
-        <div class="field-grid">
-          <label>Number <input class="r-num" value="${esc(r.number||"")}" maxlength="20"></label>
-          <label>Shop name <input class="r-name" value="${esc(r.name||"")}" maxlength="80"></label>
-          <label>First name <input class="r-fn" value="${esc(r.first_name||"")}" maxlength="60"></label>
-          <label>Last name <input class="r-ln" value="${esc(r.last_name||"")}" maxlength="60"></label>
-          <label>Phone <input class="r-ph" value="${esc(r.phone||"")}" maxlength="40"></label>
-          <label>Sell commission % <input class="r-cs" type="number" step="any" min="0" max="100" value="${cs}"></label>
-          <label>Redeem commission % <input class="r-cr" type="number" step="any" min="0" max="100" value="${cr}"></label>
-          <label>Active <span style="height:42px;display:flex;align-items:center"><input class="r-act" type="checkbox" ${r.active!==false?"checked":""}></span></label>
-        </div>
-        <label style="display:block;font-size:11px;font-weight:600;color:var(--mut);text-transform:uppercase;letter-spacing:.04em;margin:8px 0 4px">Address</label>
-        <input class="r-addr" value="${esc(r.address||"")}" maxlength="200" style="width:100%;height:42px;border:1px solid var(--line);background:var(--key);border-radius:12px;padding:0 12px">
-        <div class="btn-row"><button data-a="saveret" data-v="${esc(r.id)}" style="min-width:140px">Save retailer</button></div>
-      </div>`:"";
-      return `<div class="rlist-item ${open?"open":""}">${head}${body}</div>`;
-    }).join("")||`<div class="empty">No retailers yet</div>`;
-    const map = this.retailersMapHTML(d.all_retailers||[]);
-    return `<div class="card" style="grid-column:1/-1">
-      <div class="glist-toolbar"><h3>Retailers</h3>
-        <button type="button" data-a="openaddret"><ha-icon icon="mdi:plus"></ha-icon> Add retailer</button></div>
-      <p class="note">Tap a retailer to expand contact details and commission. Collapsed list stays easy to scan. Green = Active, Red = Disabled.</p>
-      ${map}
-      <div class="rlist">${list}</div></div>`}
-  retailersMapHTML(retailers){
-    // Simple projected SVG of Aruba (approx bounds)
-    const latMin=12.40, latMax=12.62, lngMin=-70.07, lngMax=-69.86;
-    const W=420, H=280, pad=18;
-    const proj=(lat,lng)=>{
-      const x=pad+((lng-lngMin)/(lngMax-lngMin))*(W-2*pad);
-      const y=pad+((latMax-lat)/(latMax-latMin))*(H-2*pad);
-      return [x,y];
-    };
-    // Simplified Aruba outline (relative path)
-    const outline="M 80,40 L 120,28 L 180,22 L 240,30 L 300,55 L 340,95 L 360,140 L 355,180 L 330,220 L 280,250 L 220,255 L 160,245 L 110,220 L 75,180 L 60,130 L 55,90 Z";
-    const pins=retailers.filter(r=>r.lat!=null&&r.lng!=null).map(r=>{
-      const [x,y]=proj(+r.lat,+r.lng);
-      const on=r.active!==false;
-      return `<g class="pin ${on?"active":"inactive"}" data-a="editret" data-v="${esc(r.id)}">
-        <circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="7" fill="${on?"#10b981":"#f43f5e"}"/>
-        <title>#${esc(r.number||"")} ${esc(r.name||"")}\n${esc(r.address||"")}</title>
-      </g>`;
-    }).join("");
-    const nOn=retailers.filter(r=>r.active!==false).length;
-    const nOff=retailers.length-nOn;
-    return `<div class="rmap">
-      <h4><ha-icon icon="mdi:map-marker-radius"></ha-icon> Aruba retailer map</h4>
-      <svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Aruba retailer distribution">
-        <rect width="${W}" height="${H}" fill="#0ea5e910" rx="12"/>
-        <path d="${outline}" fill="#6366f122" stroke="#6366f1" stroke-width="2"/>
-        <text x="90" y="120" font-size="11" fill="var(--mut)" opacity=".7">Oranjestad</text>
-        <text x="300" y="200" font-size="11" fill="var(--mut)" opacity=".7">San Nicolas</text>
-        <text x="200" y="50" font-size="11" fill="var(--mut)" opacity=".7">Noord / Palm Beach</text>
-        ${pins}
-      </svg>
-      <div class="legend"><span><i class="on"></i>Active (${nOn})</span><span><i class="off"></i>Disabled (${nOff})</span><span>Total ${retailers.length}</span></div>
-    </div>`}
-  addRetailerModal(){return `<div class="modal-bg" data-a="closeaddret"><div class="modal" onclick="event.stopPropagation()">
-    <h3>Add retailer</h3>
-    <div class="field-grid">
-      <label>Number <input id="rn-num" placeholder="001" maxlength="20"></label>
-      <label>Shop name <input id="rn" placeholder="Shop name" maxlength="80"></label>
-      <label>First name <input id="rn-fn" maxlength="60"></label>
-      <label>Last name <input id="rn-ln" maxlength="60"></label>
-      <label>Phone <input id="rn-ph" maxlength="40"></label>
-      <label>Sell commission % <input id="rn-cs" type="number" value="10" step="any" min="0" max="100"></label>
-      <label>Redeem commission % <input id="rn-cr" type="number" value="0" step="any" min="0" max="100"></label>
-    </div>
-    <label style="display:block;font-size:11px;font-weight:600;color:var(--mut);margin:10px 0 4px">Address</label>
-    <input id="rn-addr" maxlength="200" style="width:100%;height:42px;border:1px solid var(--line);background:var(--key);border-radius:12px;padding:0 12px">
-    <div class="modal-actions"><button class="ghost" data-a="closeaddret">Cancel</button><button data-a="addret">Create retailer</button></div>
-  </div></div>`}
   
   promosCard(){const s=this.s,list=s.data.promotions||[],games=s.data.all_games||[],cur=s.data.currency||"";
     const trigLabel={min_plays:"Min. plays",min_games:"Min. distinct games",min_amount:"Min. purchase amount",min_lines:"Min. plays"};
@@ -1036,7 +979,7 @@ class LotteryPosPanel extends HTMLElement{
       for(const g of games){
         const minS=+(g.min_stake??bt?.min_stake??0.5), maxS=+(g.max_stake??bt?.max_stake??100);
         if(amt<minS||amt>maxS)return this.toast(`${g.name}: amount must be ${minS}–${maxS}`,1);
-        const ln={game:g.id,bet_type:bt.key,number:s.num,amount:amt,date:s.date,format:"digit",draws};if((g.sessions||[]).length){const ss=this.activeSession();if(!ss)return this.toast("Select a draw session",1);if(!this.sessionOpen(g,ss)&&s.date===today())return this.toast(`${ss.label} is closed`,1);ln.session=ss.id;ln.session_label=ss.label}made.push(ln);
+        const ln={game:g.id,bet_type:bt.key,number:s.num,amount:amt,date:s.date,format:"digit",draws};{const dr=this.pickDraw(g);if(!dr)return this.toast(this.noDrawMsg(g),1);if(dr.session){ln.session=dr.session;ln.session_label=dr.label}}made.push(ln);
       }
       if(s.editIdx!=null){
         // edit replaces the one line; multi-add not used while editing
@@ -1053,7 +996,7 @@ class LotteryPosPanel extends HTMLElement{
     const dig=this.gameDigits(g);
     const minS=+(g.min_stake??bt?.min_stake??0.5), maxS=+(g.max_stake??bt?.max_stake??100);
     if(amt<minS||amt>maxS)return this.toast(`Amount must be ${minS}–${maxS}`,1);
-    let line={game:g.id,bet_type:bt?.key||(fmt==="jackpot"?"jackpot":fmt==="zodiac"?"zodiac":fmt==="whe"?"play_whe":""),amount:amt,date:s.date,format:fmt,draws};if((g.sessions||[]).length){const ss=this.activeSession();if(!ss)return this.toast("Select a draw session",1);if(!this.sessionOpen(g,ss)&&s.date===today())return this.toast(`${ss.label} is closed`,1);line.session=ss.id;line.session_label=ss.label}
+    let line={game:g.id,bet_type:bt?.key||(fmt==="jackpot"?"jackpot":fmt==="zodiac"?"zodiac":fmt==="whe"?"play_whe":""),amount:amt,date:s.date,format:fmt,draws};{const dr=this.pickDraw(g);if(!dr)return this.toast(this.noDrawMsg(g),1);if(dr.session){line.session=dr.session;line.session_label=dr.label}}
     if(fmt==="whe"){
       const n=parseInt(s.num,10);
       if(!(n>=1&&n<=36))return this.toast("Pick a mark 1–36",1);
@@ -1095,6 +1038,37 @@ class LotteryPosPanel extends HTMLElement{
 
   async act(a,ds){const s=this.s;
     switch(a){
+      case "logout":{await this.call("logout");this.clearSession();this.render();break}
+      case "pwmodal":case "password":this.changePasswordModal(false);break;
+      case "changepw":{const q=x=>this.shadowRoot.querySelector(x)?.value||"";const o=q("#cp-old"),n=q("#cp-new"),n2=q("#cp-new2");if(!o||!n)return this.toast("Fill in all fields",1);if(n!==n2)return this.toast("The new passwords do not match",1);
+        const r=await this.call("change_password",{old_password:o,new_password:n});if(r){s.token=r.token;try{sessionStorage.setItem(this.sessionKey(),r.token)}catch(e){}s.me.must_change=false;this._modal=null;await this.refresh();this.render();this.toast("Password changed")}break}
+      case "drawpick":{s.date=ds.d;s.session=ds.s||"";s.sessLabel=ds.l||"";s.dateAuto=false;this.render();break}
+      case "saveadv":{const v=+this.shadowRoot.querySelector("#adv").value;if(await this.call("set_sales_settings",{advance_days:v,auto_results:s.data.settings.auto_results!==false})){await this.refresh();this.toast("Saved");this.render()}break}
+      case "saveauto":{const on=!!this.shadowRoot.querySelector("#autores")?.checked;if(await this.call("set_sales_settings",{advance_days:+(s.data.settings.advance_days||30),auto_results:on})){await this.refresh();this.toast(on?"Automatic fetch on":"Automatic fetch off");this.render()}break}
+      case "calyear":{s.calYear=(s.calYear||+s.data.server_date.slice(0,4))+ +ds.v;await this.loadCal();break}
+      case "seedhol":{const y=s.calYear||+s.data.server_date.slice(0,4),r=await this.call("seed_holidays",{year:y});if(r){this.toast(r.added?`Added ${r.added} holiday(s)`:"Holidays were already added");if(r.affected_tickets)this.toast(`${r.affected_tickets} ticket(s) were already sold for those dates - review them`,1);await this.refresh();await this.loadCal()}break}
+      case "addhol":{const q=x=>this.shadowRoot.querySelector(x).value,g=q("#hg"),r=await this.call("add_holiday",{date:q("#hd"),name:q("#hn"),games:g?[g]:[]});if(r){this.toast("Holiday added");if(r.affected_tickets)this.toast(`${r.affected_tickets} ticket(s) were already sold for that date and have no draw to settle on`,1);await this.refresh();await this.loadCal()}break}
+      case "delhol":{if(!await this.modal({title:"Delete holiday",text:"Games go back on sale for that date.",ok:"Delete"}))break;if(await this.call("delete_holiday",{holiday_id:ds.v})){await this.refresh();await this.loadCal()}break}
+      case "calcsv":{const c=s.cal;if(!c)break;const rows=[["Date","Weekday","Game","Draw","Draw time","Note"]];
+        c.games.forEach(g=>Object.keys(g.plan).sort().forEach(iso=>g.plan[iso].forEach(sid=>{const x=g.sessions.find(z=>z.id===sid);rows.push([iso,DAYS[(new Date(iso+"T12:00:00").getDay()+6)%7],g.name,x?x.label:"",x?x.draw_time:g.draw_time,""])})));
+        c.holidays.forEach(h=>rows.push([h.date,DAYS[(new Date(h.date+"T12:00:00").getDay()+6)%7],(h.games||[]).length?h.games.join("/"):"ALL","","","HOLIDAY: "+h.name]));
+        const csv=rows.map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(",")).join("\n"),el=document.createElement("a");el.href=URL.createObjectURL(new Blob([csv],{type:"text/csv"}));el.download=`draw-schedule-${c.year}.csv`;el.click();break}
+      case "calprint":{const c=s.cal;if(!c)break;this.print(`<html><head><style>body{font:11px Arial;margin:12px}.cal{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}.cal-g{display:grid;grid-template-columns:repeat(7,1fr);gap:1px}.cal-d{border:1px solid #ddd;min-height:30px;padding:1px 3px}.cal-d.hol{background:#fecdd3}.cal-d.none{color:#aaa}.dots i{display:inline-block;width:6px;height:6px;border-radius:50%;margin-right:1px}.cal-h{text-align:center}h5{margin:6px 0 2px}.cal-leg span{margin-right:10px}.cal-leg i{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:3px}</style></head><body><h2>${esc(s.data.settings.name)} - draw schedule ${c.year}</h2>${this.calMonthsHTML(c)}</body></html>`);break}
+      case "saveowner":{const r=await this.call("set_owner_username",{username:this.shadowRoot.querySelector("#ou").value});if(r){s.me.username=r.username;await this.refresh();this.toast("Username changed");this.render()}break}
+      case "rmdemo":{if(!await this.modal({title:"Remove demo passwords",text:"Demo shops will no longer be able to sign in until you set a new password for them.",ok:"Remove"}))break;const r=await this.call("remove_demo_logins");if(r){await this.refresh();this.toast(`${r.removed} demo login(s) removed`);this.render()}break}
+      case "pickloc":{s.pickFor=ds.v;if(this._mapEl)this._mapEl.style.cursor="crosshair";this.shadowRoot.querySelector("#lmapwrap")?.scrollIntoView({behavior:"smooth",block:"center"});this.toast("Click the map where the shop is");break}
+      case "resetpw":{const rt=this.shadowRoot.querySelector(`.rtr[data-id="${ds.v}"]`),un=rt?.querySelector(".r-user")?.value.trim();
+        if(un){const sv=await this.call("update_retailer",{retailer_id:String(ds.v),name:rt.querySelector(".r-name").value,username:un});if(!sv)break}
+        const pw=await this.modal({title:"Set password",text:"Type a new password (min 6), or leave empty to generate one. The retailer must change it at first sign-in.",input:"New password (optional)",ok:"Set"});if(pw===null)break;
+        const r=await this.call("reset_retailer_password",{retailer_id:String(ds.v),...(pw?{password:pw}:{})});if(r){await this.refresh();this.showPasswordModal("Retailer login",[`Username: <b>${esc(r.username)}</b>`,`Password: <b style="font-size:18px;letter-spacing:1px">${esc(r.password)}</b>`,"Write it down now - it is not shown again."])}break}
+      case "saveret":{const r=this.shadowRoot.querySelector(`.rtr[data-id="${ds.v}"]`);if(!r)break;const v=x=>r.querySelector(x).value;
+        const ok=await this.call("update_retailer",{retailer_id:String(ds.v),name:v(".r-name"),number:v(".r-num"),first_name:v(".r-fn"),last_name:v(".r-ln"),address:v(".r-addr"),phone:v(".r-ph"),
+          commission_sell:+v(".r-cs"),commission_redeem:+v(".r-cr"),active:r.querySelector(".r-act").checked,lat:v(".r-lat")===""?null:+v(".r-lat"),lng:v(".r-lng")===""?null:+v(".r-lng"),username:v(".r-user")});
+        if(ok){await this.refresh();this.toast("Retailer saved");this.render()}break}
+      case "addret":{const q=sel=>{const el=this.shadowRoot.querySelector(sel);return el?String(el.value||"").trim():""};const name=q("#rn");if(!name){this.toast("Enter a shop name",1);return}
+        const payload={name,number:q("#rn-num"),first_name:q("#rn-fn"),last_name:q("#rn-ln"),address:q("#rn-addr"),phone:q("#rn-ph"),commission_sell:parseFloat(q("#rn-cs"))||10,commission_redeem:parseFloat(q("#rn-cr"))||0,active:true};
+        if(q("#rn-lat")!==""&&q("#rn-lng")!==""){payload.lat=+q("#rn-lat");payload.lng=+q("#rn-lng")}if(q("#rn-user"))payload.username=q("#rn-user");if(q("#rn-pw"))payload.password=q("#rn-pw");
+        const r=await this.call("add_retailer",payload);if(r){s.showAddRetailer=false;s._fit=true;await this.refresh();this.render();this.showPasswordModal("Retailer created",[`Shop: <b>${esc(r.name)}</b>`,`Username: <b>${esc(r.username)}</b>`,r.initial_password?`Password: <b style="font-size:18px;letter-spacing:1px">${esc(r.initial_password)}</b>`:"Password as entered.","The retailer must change it at first sign-in."])}break}
       case "theme":s.dark=!s.dark;try{localStorage.setItem("lottery_pos_dark",s.dark?"1":"0")}catch(e){}this.render();break;
       case "zod":{const id=ds.v;s.allZodiac=false;s.symbols=s.symbols.includes(id)?s.symbols.filter(x=>x!==id):[...s.symbols,id];this.render();break}
       case "zodall":{s.allZodiac=true;s.symbols=this.zodiacList().map(z=>z.id);this.render();break}
@@ -1114,9 +1088,9 @@ class LotteryPosPanel extends HTMLElement{
       case "openaddret":s.showAddRetailer=true;this.render();break;
       case "closeaddret":s.showAddRetailer=false;this.render();break;
       case "scrapejb":{this.toast("Fetching indioslottery.com…");const r=await this.call("scrape_indios",{});
-        if(r){s.scrapeResult=r;s.data=await this.ws("state");
+        if(r){s.scrapeResult=r;await this.refresh();
           const n=(r.imported||[]).length,w=(r.imported||[]).reduce((a,x)=>a+(x.winners||0),0);
-          this.toast(`Imported ${n} game(s), ${w} winning ticket(s)`);this.render()}break}
+          this.toast(`Imported ${n} result(s), ${w} winning ticket(s)`+((r.errors||[]).length?" - some sources failed":""),(r.errors||[]).length&&!n);this.render()}break}
       case "draws":s.draws=+ds.v||1;this.render();break;
       case "addjprize":{const c=this.shadowRoot.querySelector(`.gcard[data-id="${ds.v}"]`);if(!c)break;
         const box=c.querySelector(".jp-list");if(!box)break;
@@ -1190,7 +1164,7 @@ class LotteryPosPanel extends HTMLElement{
       case "copy":{const l=s.lines[s.lines.length-1];if(l){s.num=l.number;s.field="amt";this.paint()}break}
       case "send":{if(!s.lines.length)return this.toast("Ticket is empty",1);
         const t=await this.call("sell",{retailer_id:s.retailer,lines:s.lines});if(!t)break;
-        s.lines=[];s.editIdx=null;s.fresh=null;s.data=await this.ws("state");this.print(this.receipt(t,"TICKET"));this.toast(`Sold ${t.id}`);this.render();break}
+        s.lines=[];s.editIdx=null;s.fresh=null;await this.refresh();this.print(this.receipt(t,"TICKET"));this.toast(`Sold ${t.id}`);this.render();break}
       case "last":{const t=await this.call("last",{retailer_id:s.retailer});if(t)this.print(this.receipt(t,"REPRINT"));break}
       case "replay":{const t=await this.call("last",{retailer_id:s.retailer});if(t)this.load(t);break}
       case "cancel":{const id=await this.modal({title:"Cancel ticket",input:"Scan or type ticket number",ok:"Cancel ticket"});if(!id)break;const t=await this.call("cancel",{ticket_id:(String(id).match(/\d{12,}$/)||[String(id)])[0]});if(t){this.print(this.receipt(t,"CANCELLATION RECEIPT"));this.toast("Ticket cancelled")}break}
@@ -1215,7 +1189,7 @@ class LotteryPosPanel extends HTMLElement{
         const v=x=>c.querySelector(x);
         const all=[...c.querySelectorAll(".f-bt")],pick=all.filter(i=>i.checked).map(i=>i.value);
         const days=[...c.querySelectorAll(".f-day")].filter(i=>i.checked).map(i=>+i.value);
-        if(!days.length)return this.toast("Pick at least one draw day",1);
+        if(!days.length&&!c.querySelector(".f-opd")?.checked)return this.toast("Pick at least one draw day",1);
         if(!v(".f-name")?.value?.trim())return this.toast("Game name required",1);
         const fmtSel=v(".f-fmt")?.value||"digit";
         const sessions=[...c.querySelectorAll(".sess-row")].map(row=>{
@@ -1230,7 +1204,7 @@ class LotteryPosPanel extends HTMLElement{
           bet_types:pick.length===all.length||!pick.length?[]:pick,draw_days:days.length===7?[]:days,
           format:fmtSel,digits:fmtSel==="whe"?2:+(v(".f-digits")?.value||4),
           min_stake:+(v(".f-mins")?.value||0.5),max_stake:+(v(".f-maxs")?.value||100),
-          sessions};
+          sessions,...this.readSchedule(c)};
         if(fmtSel==="whe"){msg.bet_types=["play_whe"];msg.digits=2}
         if(fmtSel==="jackpot"){
           const mc=+(v(".f-mc")?.value||5);
@@ -1258,11 +1232,11 @@ class LotteryPosPanel extends HTMLElement{
           }
         }
         if(s.glogos[ds.v]!==undefined)msg.logo=s.glogos[ds.v];
-        if(await this.call("update_game",msg)){delete s.glogos[ds.v];s.data=await this.ws("state");this.toast("Game saved");this.render()}
+        if(await this.call("update_game",msg)){delete s.glogos[ds.v];await this.refresh();this.toast("Game saved");this.render()}
         break}
       case "glogoclear":s.glogos[ds.v]="";this.toast("Logo is removed when you press Save");break;
-      case "delgame":{if(!await this.modal({title:"Delete game?",text:"Only possible if it has no sales. Otherwise hide it instead.",ok:"Delete"}))break;if(await this.call("delete_game",{game_id:String(ds.v)})){s.data=await this.ws("state");this.toast("Game deleted");this.render()}break}
-      case "savebt":{const r=this.shadowRoot.querySelector(`.btr[data-k="${ds.v}"]`);if(!r)break;if(await this.call("update_bet_type",{key:ds.v,label:r.querySelector(".b-label").value,multiplier:+r.querySelector(".b-mult").value,min_stake:+r.querySelector(".b-min").value,max_stake:+r.querySelector(".b-max").value,enabled:r.querySelector(".b-en").checked})){s.data=await this.ws("state");this.toast("Bet type saved");this.render()}break}
+      case "delgame":{if(!await this.modal({title:"Delete game?",text:"Only possible if it has no sales. Otherwise hide it instead.",ok:"Delete"}))break;if(await this.call("delete_game",{game_id:String(ds.v)})){await this.refresh();this.toast("Game deleted");this.render()}break}
+      case "savebt":{const r=this.shadowRoot.querySelector(`.btr[data-k="${ds.v}"]`);if(!r)break;if(await this.call("update_bet_type",{key:ds.v,label:r.querySelector(".b-label").value,multiplier:+r.querySelector(".b-mult").value,min_stake:+r.querySelector(".b-min").value,max_stake:+r.querySelector(".b-max").value,enabled:r.querySelector(".b-en").checked})){await this.refresh();this.toast("Bet type saved");this.render()}break}
       case "saveticker":{const q=x=>this.shadowRoot.querySelector(x);
         const messages=[...this.shadowRoot.querySelectorAll(".sched-row")].map((row,i)=>({
           id:"m"+(i+1),
@@ -1271,7 +1245,7 @@ class LotteryPosPanel extends HTMLElement{
           start_at:row.querySelector(".tm-start")?.value||"",
           end_at:row.querySelector(".tm-end")?.value||"",
         })).filter(m=>m.text.trim());
-        if(await this.call("set_ticker",{text:q("#tt").value,enabled:q("#te").checked,speed:+q("#ts").value,color:q("#tc").value,messages})){s.data=await this.ws("state");this.toast("Messages saved");this.render()}break}
+        if(await this.call("set_ticker",{text:q("#tt").value,enabled:q("#te").checked,speed:+q("#ts").value,color:q("#tc").value,messages})){await this.refresh();this.toast("Messages saved");this.render()}break}
       case "addsched":{
         const t=s.data.settings.ticker||(s.data.settings.ticker={text:"",enabled:true,speed:5,color:"#39ff14",messages:[]});
         t.messages=t.messages||[];t.messages.push({id:"m"+Date.now(),text:"",enabled:true,start_at:"",end_at:""});
@@ -1280,15 +1254,15 @@ class LotteryPosPanel extends HTMLElement{
         const t=s.data.settings.ticker;if(!t||!t.messages)break;
         t.messages=t.messages.filter((_,i)=>i!==+ds.v);this.render();break}
       case "clearlogo":s.nameDraft=this.shadowRoot.querySelector("#bn")?.value;s.logoDraft="";this.render();break;
-      case "savebrand":{const q=x=>this.shadowRoot.querySelector(x)?.value??"";const logo=s.logoDraft!==undefined?s.logoDraft:s.data.settings.logo;if(await this.call("set_branding",{name:q("#bn"),logo,operator:q("#bop"),tagline:q("#btag"),license_text:q("#blic")})){s.data=await this.ws("state");s.logoDraft=undefined;s.nameDraft=undefined;s.operatorDraft=undefined;s.taglineDraft=undefined;s.licenseDraft=undefined;this.toast("Branding saved");this.render()}break}
-      case "saveres":{const q=x=>{const el=this.shadowRoot.querySelector(x);return el?el.value:""};const dt=q("#rd");const sessEl=this.shadowRoot.querySelector("#rsess");const payload={game:q("#rg"),date:dt,numbers:[q("#r1"),q("#r2"),q("#r3")].filter(Boolean)};if(sessEl&&sessEl.value)payload.session=sessEl.value;const r=await this.call("set_results",payload);if(r){this.toast(`Settled - ${r.winners.length} winning ticket(s)`);s.rf=!s.rf||dt<s.rf?dt:s.rf;s.rt=!s.rt||dt>s.rt?dt:s.rt;await this.loadResults()}break}
+      case "savebrand":{const q=x=>this.shadowRoot.querySelector(x)?.value??"";const logo=s.logoDraft!==undefined?s.logoDraft:s.data.settings.logo;if(await this.call("set_branding",{name:q("#bn"),logo,operator:q("#bop"),tagline:q("#btag"),license_text:q("#blic")})){await this.refresh();s.logoDraft=undefined;s.nameDraft=undefined;s.operatorDraft=undefined;s.taglineDraft=undefined;s.licenseDraft=undefined;this.toast("Branding saved");this.render()}break}
+      case "saveres":{const q=x=>{const el=this.shadowRoot.querySelector(x);return el?el.value:""};const dt=q("#rd"),g=s.data.all_games.find(x=>x.id===q("#rg"));if(!g)break;
+        const numbers=this.collectResult(g);if(!numbers)break;const payload={game:g.id,date:dt,numbers};const sessEl=this.shadowRoot.querySelector("#rsess");if(sessEl&&sessEl.value)payload.session=sessEl.value;
+        const r=await this.call("set_results",payload);if(r){this.toast(`Settled - ${r.winners.length} winning ticket(s)`);s.rf=!s.rf||dt<s.rf?dt:s.rf;s.rt=!s.rt||dt>s.rt?dt:s.rt;await this.loadResults()}break}
       case "runreport":case "printreport":{const q=x=>this.shadowRoot.querySelector(x).value;s.rpf=q("#f");s.rpt=q("#t");const r=await this.call("report",{date_from:s.rpf,date_to:s.rpt});if(!r)break;s.report=r;if(a==="printreport")this.print(this.reportHTML(r));else this.render();break}
       case "csv":{const r=s.report;if(!r)return this.toast("Run the report first",1);const L=[["Number","Retailer","Tickets","Plays","Sales","Sell commission","Redeem commission","Total commission","Prizes","Paid","Unpaid","Net"],...r.rows.map(x=>[x.number||"",x.retailer,x.tickets,x.lines,x.sales,x.commission_sell??x.commission,x.commission_redeem||0,x.commission,x.prizes,x.paid,x.unpaid,x.net]),[],["Game","Tickets","Sales","Prizes","Net"],...r.games.map(x=>[x.game,x.tickets,x.sales,x.prizes,x.net]),[],["Totals"],...Object.entries(r.totals)];const csv=L.map(row=>row.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(",")).join("\n"),el=document.createElement("a");el.href=URL.createObjectURL(new Blob([csv],{type:"text/csv"}));el.download=`lottery-report-${r.from}_${r.to}.csv`;el.click();break}
-      case "sub":s.sub=ds.v;if(ds.v==="results"&&!s.rs)await this.loadResults();else this.render();break;
+      case "sub":s.sub=ds.v;if(ds.v==="results"&&!s.rs)await this.loadResults();else if(ds.v==="calendar"&&!s.cal)await this.loadCal();else this.render();break;
       case "loadrs":{const q=x=>this.shadowRoot.querySelector(x).value;s.rf=q("#rf");s.rt=q("#rt");await this.loadResults();break}
       case "paywin":{if(!await this.modal({title:"Pay prize",text:`Ticket ${ds.v}`,ok:"Mark as paid"}))break;const r=await this.call("redeem",{ticket_id:ds.v,retailer_id:s.retailer});if(r){this.print(this.receipt(r,"PAID "+fmt(r.prize)));await this.loadResults()}break}
-      case "saveret":{const r=this.shadowRoot.querySelector(`.rtr[data-id="${ds.v}"]`);if(!r)break;
-        if(await this.call("update_retailer",{retailer_id:String(ds.v),name:r.querySelector(".r-name").value,number:r.querySelector(".r-num").value,first_name:r.querySelector(".r-fn").value,last_name:r.querySelector(".r-ln").value,address:r.querySelector(".r-addr").value,phone:r.querySelector(".r-ph").value,commission_sell:+r.querySelector(".r-cs").value,commission_redeem:+r.querySelector(".r-cr").value,active:r.querySelector(".r-act").checked})){s.data=await this.ws("state");this.toast("Retailer saved");this.render()}break}
       case "savedesign":{const d=this.design();
         d.messages=[...this.shadowRoot.querySelectorAll(".tmsg-row")].map(row=>({
           id:row.dataset.id||undefined,
@@ -1299,7 +1273,7 @@ class LotteryPosPanel extends HTMLElement{
           start_at:row.querySelector(".tm-start")?.value||"",
           end_at:row.querySelector(".tm-end")?.value||""
         })).filter(m=>m.text.trim());
-        const r=await this.call("set_ticket_design",{design:d});if(r){s.data=await this.ws("state");s.design=null;this.toast("Ticket layout saved");this.render()}break}
+        const r=await this.call("set_ticket_design",{design:d});if(r){await this.refresh();s.design=null;this.toast("Ticket layout saved");this.render()}break}
       case "addtmsg":{const d=this.design();if(!d.messages)d.messages=[];const typ=ds.v||"standard";d.messages.push({id:"",type:typ,text:typ==="dynamic"?"{date}\n{name} jackpot is {amount}":"",enabled:true,games:[],start_at:"",end_at:""});this.render();break}
       case "resetdesign":s.design={...this.designDefaults(),messages:[]};this.render();break;
       case "testprint":{const d=this.design();this.print(this.docHTML(this.receiptInner(this.sampleTicket(),"TEST TICKET",d),d));break}
@@ -1319,7 +1293,7 @@ class LotteryPosPanel extends HTMLElement{
           quantity:+row.querySelector(".np-qty").value||1
         })).filter(x=>x.amount>0&&x.quantity>0);
         const r=await this.call("add_promotion",{name:q("#pn").value,trigger:q("#pt").value,trigger_value:+q("#pv").value,code_digits:+q("#pd").value,games,label:q("#pl").value,instruction:q("#pi").value,url:q("#pu").value,enabled:true,start_at:q("#ps").value,end_at:q("#pe").value,prizes,prize:prizes[0]?.amount||0});
-        if(r){s.data=await this.ws("state");this.toast("Promotion created");this.render()}break}
+        if(r){await this.refresh();this.toast("Promotion created");this.render()}break}
       case "addprizerow":{const c=this.shadowRoot.querySelector(`.promo-card[data-pid="${ds.v}"]`);if(!c)break;
         const box=c.querySelector(".p-prizes");if(!box)break;
         const row=document.createElement("div");row.className="row p-prize-row";row.style.margin="0";
@@ -1337,39 +1311,21 @@ class LotteryPosPanel extends HTMLElement{
           quantity:+row.querySelector(".pp-qty").value||1
         })).filter(x=>x.amount>0&&x.quantity>0);
         const r=await this.call("update_promotion",{promotion_id:String(ds.v),name:v(".p-name").value,trigger:v(".p-trig").value,trigger_value:+v(".p-val").value,code_digits:+v(".p-dig").value,games,label:v(".p-label").value,instruction:v(".p-instr").value,url:v(".p-url").value,enabled:v(".p-en").checked,start_at:v(".p-start").value,end_at:v(".p-end").value,prizes,prize:prizes[0]?.amount||0});
-        if(r){s.data=await this.ws("state");this.toast("Promotion saved");this.render()}break}
+        if(r){await this.refresh();this.toast("Promotion saved");this.render()}break}
       case "drawpromo":{if(!await this.modal({title:"Draw winners?",text:"Randomly assign prize slots to pending codes for this promotion. Codes without a slot become non-winners.",ok:"Draw"}))break;
         const r=await this.call("draw_promo_winners",{promotion_id:String(ds.v)});
-        if(r){this.toast(`Drawn ${r.winners} winner(s) from ${r.assigned} code(s)`);s.data=await this.ws("state");this.render()}break}
+        if(r){this.toast(`Drawn ${r.winners} winner(s) from ${r.assigned} code(s)`);await this.refresh();this.render()}break}
       case "delpromo":{if(!await this.modal({title:"Delete promotion",text:"Remove this promotion? Existing ticket codes stay valid.",ok:"Delete"}))break;
         const r=await this.call("delete_promotion",{promotion_id:String(ds.v)});
-        if(r!==null){s.data=await this.ws("state");this.toast("Deleted");this.render()}break}
-      case "addret":{
-        const q=sel=>{const el=this.shadowRoot.querySelector(sel);return el?String(el.value||"").trim():""};
-        const name=q("#rn");
-        if(!name){this.toast("Enter a shop name",1);return}
-        const payload={
-          name,
-          number:q("#rn-num"),
-          first_name:q("#rn-fn"),
-          last_name:q("#rn-ln"),
-          address:q("#rn-addr"),
-          phone:q("#rn-ph"),
-          commission_sell:parseFloat(q("#rn-cs"))||10,
-          commission_redeem:parseFloat(q("#rn-cr"))||0,
-          active:true
-        };
-        const r=await this.call("add_retailer",payload);
-        if(r){s.showAddRetailer=false;s.data=await this.ws("state");this.toast("Retailer added");this.render()}
-        break}
+        if(r!==null){await this.refresh();this.toast("Deleted");this.render()}break}
       case "addgame":{const q=x=>this.shadowRoot.querySelector(x)?.value??"";
         if(!q("#gn").trim())return this.toast("Enter a game name",1);
-        if(await this.call("add_game",{name:q("#gn"),color:q("#gc"),draw_time:q("#gt")||"13:00",cutoff:q("#gk")||"12:45",logo:s.gameLogo||"",format:q("#gf")||"digit",digits:q("#gf")==="whe"?2:+q("#gd")||4,main_count:+q("#gmc")||5,main_max:+q("#gmm")||30,mega_count:+q("#gmega")||0,mega_max:+q("#gmx")||15})){s.gameLogo="";s.showAddGame=false;s.data=await this.ws("state");this.toast("Game added");this.render()}break}
+        if(await this.call("add_game",{name:q("#gn"),color:q("#gc"),draw_time:q("#gt")||"13:00",cutoff:q("#gk")||"12:45",logo:s.gameLogo||"",format:q("#gf")||"digit",digits:q("#gf")==="whe"?2:+q("#gd")||4,main_count:+q("#gmc")||5,main_max:+q("#gmm")||30,mega_count:+q("#gmega")||0,mega_max:+q("#gmx")||15})){s.gameLogo="";s.showAddGame=false;await this.refresh();this.toast("Game added");this.render()}break}
     }}
 
   async scanned(id){if(!id)return;id=(String(id).match(/\d{12,}$/)||[String(id)])[0];const s=this.s,cur=s.data.currency;s.scan="";
     const t=await this.call("ticket",{ticket_id:id});this.render();if(!t)return;
-    if(t.status==="won"){if(await this.modal({title:"🏆 Winner!",big:`${cur} ${fmt(t.prize)}`,text:`Ticket ${t.id}`,ok:"Pay prize",tone:"win"})){const r=await this.call("redeem",{ticket_id:t.id,retailer_id:s.retailer});if(r){this.print(this.receipt(r,"PAID "+fmt(r.prize)));this.toast("Prize paid");s.data=await this.ws("state");this.render()}}}
+    if(t.status==="won"){if(await this.modal({title:"🏆 Winner!",big:`${cur} ${fmt(t.prize)}`,text:`Ticket ${t.id}`,ok:"Pay prize",tone:"win"})){const r=await this.call("redeem",{ticket_id:t.id,retailer_id:s.retailer});if(r){this.print(this.receipt(r,"PAID "+fmt(r.prize)));this.toast("Prize paid");await this.refresh();this.render()}}}
     else if(t.status==="redeemed")this.toast("Already paid",1);
     else if(t.status==="cancelled")this.toast("Ticket was cancelled",1);
     else if(t.status==="lost"){this.load(t);this.toast("Not a winner - lines loaded to replay")}
@@ -1406,6 +1362,202 @@ class LotteryPosPanel extends HTMLElement{
     return `<html><body style="font:12px Arial,sans-serif;margin:16px"><h3>${esc(this.s.data.settings.name)} - report ${r.from} → ${r.to}</h3><table width="300">${k("Tickets sold",T.tickets)}${k("Cancelled",T.cancelled)}${k("Plays",T.lines)}${k("Sales "+c,fmt(T.sales))}${k("Sell commission",fmt(T.commission_sell??T.commission))}${k("Redeem commission",fmt(T.commission_redeem||0))}${k("Prizes won",fmt(T.prizes))}${k("Prizes paid",fmt(T.paid))}${k("Unpaid liability",fmt(T.unpaid))}${k("Open exposure",fmt(T.exposure))}${k("NET",fmt(T.net))}</table>
     <h4>By retailer</h4><table width="100%" border="0"><tr align=left><th>#</th><th>Retailer</th><th>Tkts</th><th>Sales</th><th>Sell</th><th>Redeem</th><th>Prizes</th><th>Unpaid</th><th>Net</th></tr>${r.rows.map(x=>`<tr><td>${esc(x.number||"")}</td><td>${esc(x.retailer)}</td><td>${x.tickets}</td><td>${fmt(x.sales)}</td><td>${fmt(x.commission_sell??x.commission)}</td><td>${fmt(x.commission_redeem||0)}</td><td>${fmt(x.prizes)}</td><td>${fmt(x.unpaid)}</td><td>${fmt(x.net)}</td></tr>`).join("")}</table>
     <h4>By game</h4><table width="100%"><tr align=left><th>Game</th><th>Tkts</th><th>Sales</th><th>Prizes</th><th>Net</th></tr>${r.games.map(x=>`<tr><td>${esc(x.game)}</td><td>${x.tickets}</td><td>${fmt(x.sales)}</td><td>${fmt(x.prizes)}</td><td>${fmt(x.net)}</td></tr>`).join("")}</table></body></html>`}
+  /* ================= v0.10 additions ================= */
+  sessionKey(){return "lottery_pos_tok_"+(this.s.mode||"sell")}
+  async refresh(){const s=this.s;try{const d=await this.ws("state");s.data=d;s.clockOff=(d.server_ts||0)-Date.now()/1000;s.loadedAt=Date.now();return d}
+    catch(e){if(e&&e.code==="auth_required")this.dropSession("Session expired - please sign in again");return null}}
+  async enter(){const s=this.s;await this.refresh();const d=s.data;if(!d)return;
+    s.tab=s.mode==="office"?"office":"sell";s.retailer=s.me.retailer_id||"";s.bt=d.bet_types[0]?.key;s.sel=[];s.dateAuto=true;
+    const g=d.games.find(x=>this.nextOpen(x))||d.games[0];if(g)s.sel=[g.id];
+    this._last=Date.now();
+    if(s.me.must_change)setTimeout(()=>this.changePasswordModal(true),60)}
+  clearSession(){const s=this.s;try{sessionStorage.removeItem(this.sessionKey())}catch(e){}s.token="";s.me=null;s.data=null;s.lines=[];s.report=null;s.rs=null;this._modal=null}
+  dropSession(msg){this.clearSession();this.s.loginErr=msg||"";this.render()}
+  async doLogin(){const s=this.s,q=x=>this.shadowRoot.querySelector(x),u=q("#lu").value.trim(),p=q("#lp").value;
+    if(!u||!p){s.loginErr="Enter your username and password";s.lastUser=u;return this.render()}
+    const b=q("#lb");if(b){b.disabled=true;b.textContent="Signing in…"}
+    try{const r=await this._hass.callWS({type:"lottery_pos/login",username:u,password:p,mode:s.mode});
+      s.token=r.token;s.me=r;s.lastUser=u;s.loginErr="";try{sessionStorage.setItem(this.sessionKey(),r.token)}catch(e){}
+      await this.enter()}catch(e){s.loginErr=e.message||"Sign in failed";s.lastUser=u}
+    this.render()}
+  loginHTML(){const s=this.s,office=s.mode==="office";
+    return `<style>${CSS}${this._lcss||""}</style><div class="login"><form class="lbox" id="lf">
+      <div class="lico"><ha-icon icon="${office?"mdi:shield-account":"mdi:ticket-confirmation"}"></ha-icon></div>
+      <h2>${office?"Back office":"Lottery sell"}</h2><p class="note" style="margin:0 0 14px">${office?"Lottery owner sign in":"Retailer sign in"}</p>
+      <label>Username<input id="lu" autocomplete="username" autocapitalize="off" spellcheck="false" value="${esc(s.lastUser||"")}"></label>
+      <label>Password<input id="lp" type="password" autocomplete="current-password"></label>
+      <div class="lerr">${esc(s.loginErr||"")}</div>
+      <button type="submit" id="lb" class="lgo">Sign in</button></form></div>`}
+  renderLogin(){const r=this.shadowRoot;this.classList.toggle("dark",!!this.s.dark);r.innerHTML=this.loginHTML();
+    const f=r.querySelector("#lf");f.onsubmit=e=>{e.preventDefault();this.doLogin()};
+    const el=r.querySelector(this.s.lastUser?"#lp":"#lu");if(el)setTimeout(()=>el.focus(),30)}
+  changePasswordModal(forced){
+    this._modal=`<div class="modal-bg" ${forced?"":`data-a="closemodal"`}><div class="modal" onclick="event.stopPropagation()" style="max-width:380px">
+      <h3>${forced?"Choose a new password":"Change password"}</h3>${forced?`<p class="note">You are using a temporary password. Choose your own to continue.</p>`:""}
+      <label class="fl">Current password<input id="cp-old" type="password" autocomplete="current-password"></label>
+      <label class="fl">New password (min 6)<input id="cp-new" type="password" autocomplete="new-password"></label>
+      <label class="fl">Repeat new password<input id="cp-new2" type="password" autocomplete="new-password"></label>
+      <div class="modal-actions">${forced?"":`<button class="ghost" data-a="closemodal">Cancel</button>`}<button data-a="changepw" data-f="${forced?1:""}">Save password</button></div></div></div>`;
+    this.render()}
+  showPasswordModal(title,lines){this._modal=`<div class="modal-bg" data-a="closemodal"><div class="modal" onclick="event.stopPropagation()" style="max-width:380px"><h3>${esc(title)}</h3>
+    ${lines.map(l=>`<p class="note">${l}</p>`).join("")}<div class="modal-actions"><button data-a="closemodal">Done</button></div></div></div>`;this.render()}
+
+  /* ---- draw schedule (server-provided list of draws on sale) ---- */
+  nowS(){return Date.now()/1000+(this.s.clockOff||0)}
+  ups(g){return ((this.s.data&&this.s.data.upcoming)||{})[g.id]||[]}
+  nextOpen(g){const n=this.nowS();return this.ups(g).find(u=>u.cutoff_ts>n&&(u.open_ts||0)<=n)||null}
+  dayLabel(iso){const sd=this.s.data.server_date;if(iso===sd)return "Today";const t=new Date(sd+"T12:00:00");t.setDate(t.getDate()+1);if(iso===t.toISOString().slice(0,10))return "Tomorrow";
+    return new Date(iso+"T12:00:00").toLocaleDateString("en-GB",{weekday:"short",day:"numeric",month:"short"})}
+  cd(g){const d=this.s.data,n=this.nowS(),hol=(d.today_holiday||{})[g.id];const u=this.ups(g).filter(x=>x.cutoff_ts>n);
+    if(!u.length)return{open:0,txt:hol?`Holiday · ${hol}`:"No draws scheduled"};
+    const x=u[0],lab=x.label?x.label+" · ":"";
+    if((x.open_ts||0)>n)return{open:1,txt:`${lab}opens ${g.open_time}`};
+    if(x.date===d.server_date){const m=Math.max(0,Math.floor((x.cutoff_ts-n)/60));return{open:1,txt:`${lab}closes ${m>=60?Math.floor(m/60)+"h "+m%60+"m":m+"m"}`}}
+    return{open:1,txt:`${hol?"Holiday today · ":""}Next: ${this.dayLabel(x.date)} ${x.label||x.draw_time}`}}
+  tick(){const s=this.s;if(!s.token||!s.data)return;
+    if(s.mode==="office"&&Date.now()-(this._last||0)>29*60e3)return this.dropSession("Signed out after 30 minutes of inactivity");
+    const n=this.nowS();const stale=Date.now()-(s.loadedAt||0)>5*60e3||s.data.games.some(g=>{const u=this.ups(g)[0];return u&&u.cutoff_ts<=n});
+    if(stale&&s.tab==="sell"&&!this._modal){this.refresh().then(()=>this.render());return}
+    if(s.tab!=="sell")return;let sig="";for(const g of s.data.games){const c=this.cd(g);sig+=c.open?1:0;const el=this.shadowRoot.querySelector(`[data-cd="${g.id}"]`);if(el)el.textContent=c.txt}if(sig!==this._sig)this.render()}
+  readSchedule(c){const opd=!!c.querySelector(".f-opd")?.checked,ws={};c.querySelectorAll(".ws-sel").forEach(sel=>{if(sel.value&&sel.value!=="none")ws[sel.dataset.wd]=sel.value});return{one_per_day:opd,week_schedule:opd?ws:{},ext_codes:(c.querySelector(".f-ext")?.value||"").split(/[,\n]+/).map(x=>x.trim()).filter(Boolean)}}
+  autoDraw(){const s=this.s,g=this.primaryGame();if(!g)return;const sig=s.sel.join(",");if(sig!==this._selSig){this._selSig=sig;s.dateAuto=true}
+    if(s.dateAuto===false)return;const u=this.nextOpen(g);if(u){s.date=u.date;s.session=u.session||"";s.sessLabel=u.label||""}}
+  pickDraw(g){const s=this.s,on=this.ups(g).filter(x=>x.date===s.date&&x.cutoff_ts>this.nowS());if(!on.length)return null;
+    return on.find(x=>(x.session||"")===(s.session||""))||on.find(x=>(x.label||"").toLowerCase()===((s.sessLabel||"")).toLowerCase())||(on.length===1?on[0]:on[0])}
+  noDrawMsg(g){const s=this.s,h=(s.data.holidays||[]).find(h=>h.date===s.date&&(!(h.games||[]).length||h.games.includes(g.id)));
+    return h?`${g.name}: no draw on ${s.date} - ${h.name} (holiday)`:`${g.name} has no draw on sale for ${s.date}`}
+  weekText(g){if(!g.one_per_day)return "";const ss=g.sessions||[];return DAYS.map((n,i)=>{const id=(g.week_schedule||{})[i];const x=ss.find(z=>z.id===id);return x?`${n} ${x.label.slice(0,3)}`:""}).filter(Boolean).join(" · ")}
+  sessionSelHTML(){const s=this.s,g=this.primaryGame();if(!g)return "";const d=s.data,n=this.nowS(),list=this.ups(g).filter(x=>x.cutoff_ts>n).slice(0,8);
+    const hol=(d.holidays||[]).find(h=>h.date===s.date&&(!(h.games||[]).length||h.games.includes(g.id)));
+    const onDate=list.some(x=>x.date===s.date);const dg=this.s.sel.length>1;
+    const chips=list.map(x=>{const on=x.date===s.date&&(x.session||"")===(s.session||"");
+      return `<button type="button" class="${on?"on":""}" data-a="drawpick" data-d="${x.date}" data-s="${esc(x.session||"")}" data-l="${esc(x.label||"")}"><b>${this.dayLabel(x.date)}</b>${x.label?" · "+esc(x.label):""}<small style="display:block;font-weight:600;opacity:.85;font-size:11px">draw ${x.draw_time} · cut ${x.cutoff}</small></button>`}).join("");
+    const warn=!onDate?`<div class="warn">${hol?`🎌 ${esc(hol.name)} — holiday, no draw and no sales on ${s.date}`:`No ${esc(g.name)} draw on ${s.date}`}. Pick one of the draws above.</div>`:"";
+    return `<div class="row" style="margin:6px 0 2px;align-items:flex-start"><span class="note" style="padding-top:8px">Draw${dg?" (first game)":""}</span><div class="sess-sel">${chips||`<span class="note">No draws on sale</span>`}</div></div>${warn}`}
+
+  /* ---- results form ---- */
+  resultFieldsHTML(g){const fmt=g.format||"digit",dig=+(g.digits||4),zero=n=>"0".repeat(n);
+    if(fmt==="whe")return `<div class="row"><label class="fl">Winning mark (1–36)<input class="rn" data-dig="2" data-k="whe" maxlength="2" size="3" inputmode="numeric" placeholder="1–36"></label></div>`;
+    if(fmt==="zodiac")return `<div class="row"><label class="fl">Number (${dig} digits)<input class="rn" data-dig="${dig}" data-k="zn" maxlength="${dig}" size="${dig+2}" inputmode="numeric" placeholder="${zero(dig)}"></label>
+      <label class="fl">Winning sign<select id="rzs">${(this.s.data.zodiac_symbols||[]).map(z=>`<option value="${z.id}">${z.emoji} ${z.label}</option>`).join("")}</select></label></div>`;
+    if(fmt==="jackpot"){const mc=+(g.main_count||5);return `<div class="row">${Array.from({length:mc},(_,i)=>`<label class="fl">Ball ${i+1}<input class="rn" data-dig="2" data-k="ball" maxlength="2" size="3" inputmode="numeric" placeholder="00"></label>`).join("")}
+      ${+g.mega_count?`<label class="fl">Mega<input class="rn" data-dig="2" data-k="mega" maxlength="2" size="3" inputmode="numeric" placeholder="00"></label>`:""}</div>`}
+    return `<div class="row">${["1st","2nd","3rd"].map((l,i)=>`<label class="fl">${l} prize<input class="rn" data-dig="${dig}" data-k="p${i}" maxlength="${dig}" size="${dig+2}" inputmode="numeric" placeholder="${zero(dig)}"></label>`).join("")}</div>
+      <p class="note">Exactly ${dig} digits per number.</p>`}
+  collectResult(g){const q=x=>this.shadowRoot.querySelector(x),vals=[...this.shadowRoot.querySelectorAll(".rn")];const fmt=g.format||"digit";
+    const need=(el,label)=>{const n=+el.dataset.dig;if(el.value.length!==n){this.toast(`${label} needs exactly ${n} digit${n>1?"s":""}`,1);el.focus();return false}return true};
+    if(fmt==="whe"){const e=vals[0];if(!e.value||+e.value<1||+e.value>36){this.toast("Mark must be 1–36",1);return null}return [String(+e.value)]}
+    if(fmt==="zodiac"){if(!need(vals[0],"Number"))return null;return [vals[0].value,q("#rzs").value]}
+    if(fmt==="jackpot"){for(const [i,e] of vals.entries())if(!need(e,e.dataset.k==="mega"?"Mega":`Ball ${i+1}`))return null;return vals.map(e=>e.value)}
+    const out=[];for(const [i,e] of vals.entries()){if(!e.value){if(i===0){this.toast("Enter the 1st prize number",1);return null}continue}if(!need(e,["1st","2nd","3rd"][i]+" prize"))return null;out.push(e.value)}return out}
+
+  /* ---- draw calendar & holidays ---- */
+  async loadCal(){const s=this.s;s.calYear=s.calYear||+s.data.server_date.slice(0,4);const r=await this.call("year_schedule",{year:s.calYear});if(r)s.cal=r;this.render()}
+  calendarCard(){const s=this.s,d=s.data,cal=s.cal,yr=s.calYear||+d.server_date.slice(0,4);const gname=id=>(d.all_games.find(g=>g.id===id)||{}).name||id;
+    const weekRows=d.all_games.filter(g=>g.enabled!==false).map(g=>{const ss=g.sessions||[];const cells=DAYS.map((n,i)=>{let t="—";
+      if(g.one_per_day){const x=ss.find(z=>z.id===(g.week_schedule||{})[i]);t=x?esc(x.label):"—"}
+      else if(!g.draw_days?.length||g.draw_days.includes(i))t=ss.length?ss.map(z=>esc(z.label)).join(" + "):esc(g.draw_time);
+      return `<td class="${t==="—"?"off":""}">${t}</td>`}).join("");
+      return `<tr><td style="text-align:left"><span class="dot" style="background:${g.color};display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px"></span><b>${esc(g.name)}</b>${g.one_per_day?` <span class="st active">1/day</span>`:""}</td>${cells}</tr>`}).join("");
+    const hols=(cal?cal.holidays:d.holidays.filter(h=>h.date.startsWith(String(yr))));
+    const holRows=hols.map(h=>`<tr><td>${h.date}</td><td>${DAYS[(new Date(h.date+"T12:00:00").getDay()+6)%7]}</td><td style="text-align:left"><b>${esc(h.name)}</b></td><td>${(h.games||[]).length?h.games.map(gname).map(esc).join(", "):"All games"}</td><td><button class="ghost dng" data-a="delhol" data-v="${h.id}">Delete</button></td></tr>`).join("")||`<tr><td colspan="5" class="note">No holidays for ${yr} yet. Use “Add Aruba holidays”.</td></tr>`;
+    const months=cal?this.calMonthsHTML(cal):`<div class="empty">Loading…</div>`;
+    return `<div class="card" style="grid-column:1/-1"><h3>Sales rules</h3><div class="row"><label class="fl">Sell tickets up to <input id="adv" type="number" min="1" max="90" value="${d.settings.advance_days||30}" style="width:80px"> days ahead</label>
+      <button data-a="saveadv">Save</button></div>
+      <p class="note">Sales for the next draw open as soon as the previous draw's cut-off has passed, so after a midday draw closes the evening draw is on sale, and after the last draw of the day, tomorrow's draw is on sale.</p></div>
+    <div class="card" style="grid-column:1/-1"><h3>Weekly draw pattern</h3>
+      <table class="wk"><tr><th style="text-align:left">Game</th>${DAYS.map(n=>`<th>${n}</th>`).join("")}</tr>${weekRows}</table>
+      <p class="note">Change the pattern in <b>Games &amp; schedule</b>. With “One draw per day” a weekday can only have one draw: midday <i>or</i> evening.</p></div>
+    <div class="card" style="grid-column:1/-1"><div class="glist-toolbar"><h3>Holidays — no draw, no sales</h3>
+      <div class="row"><button class="ghost" data-a="calyear" data-v="-1">‹</button><b>${yr}</b><button class="ghost" data-a="calyear" data-v="1">›</button>
+      <button data-a="seedhol">Add Aruba holidays ${yr}</button></div></div>
+      <div class="row hol-add"><input type="date" id="hd" min="${yr}-01-01" max="${yr}-12-31"><input id="hn" placeholder="Holiday name" maxlength="60" style="flex:1;min-width:160px">
+        <select id="hg"><option value="">All games</option>${d.all_games.map(g=>`<option value="${g.id}">${esc(g.name)} only</option>`).join("")}</select><button data-a="addhol">Add holiday</button></div>
+      <table><tr><th>Date</th><th>Day</th><th style="text-align:left">Holiday</th><th>Applies to</th><th></th></tr>${holRows}</table>
+      <p class="note">Aruba dates are calculated (Easter-based days included). Check them against the official government calendar before relying on them; add or delete as needed. Games cannot be sold for a holiday, and multi-draw tickets skip it.</p></div>
+    <div class="card" style="grid-column:1/-1"><div class="glist-toolbar"><h3>Draw schedule ${yr}</h3><div class="row"><select id="calgame"><option value="">All games</option>${d.all_games.filter(g=>g.enabled!==false).map(g=>`<option value="${g.id}" ${s.calGame===g.id?"selected":""}>${esc(g.name)}</option>`).join("")}</select>
+      <button class="ghost" data-a="calcsv">Download CSV</button><button class="ghost" data-a="calprint">Print</button></div></div>${months}</div>`}
+  calMonthsHTML(cal,forPrint){const s=this.s,gsel=s.calGame||"",games=cal.games.filter(g=>!gsel||g.id===gsel),hol={};cal.holidays.forEach(h=>{(hol[h.date]=hol[h.date]||[]).push(h)});
+    const yr=cal.year,MN=["January","February","March","April","May","June","July","August","September","October","November","December"];
+    let out="";for(let m=0;m<12;m++){const first=new Date(yr,m,1),dim=new Date(yr,m+1,0).getDate(),pad=(first.getDay()+6)%7;
+      let cells=DAYS.map(n=>`<b class="cal-h">${n[0]}</b>`).join("")+"<span></span>".repeat(pad);
+      for(let d=1;d<=dim;d++){const iso=`${yr}-${String(m+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`,hs=hol[iso]||[];
+        const draws=[];games.forEach(g=>{(g.plan[iso]||[]).forEach(sid=>{const sl=(g.sessions.find(x=>x.id===sid)||{}).label||"";draws.push({g,sl})})});
+        const tip=[...hs.map(h=>"HOLIDAY: "+h.name),...draws.map(x=>x.g.name+(x.sl?" "+x.sl:""))].join("&#10;");
+        const dots=draws.slice(0,6).map(x=>`<i style="background:${x.g.color}"></i>`).join("");
+        cells+=`<div class="cal-d ${hs.length?"hol":""} ${!draws.length&&!hs.length?"none":""}" title="${esc(tip).replace(/&amp;#10;/g,"&#10;")}"><span>${d}</span><div class="dots">${dots}</div></div>`}
+      out+=`<div class="cal-m"><h5>${MN[m]}</h5><div class="cal-g">${cells}</div></div>`}
+    const legend=`<div class="cal-leg">${games.map(g=>`<span><i style="background:${g.color}"></i>${esc(g.name)}</span>`).join("")}<span><i class="h"></i>Holiday</span></div>`;
+    return legend+`<div class="cal">${out}</div>`}
+
+  /* ---- retailers: login + Leaflet map ---- */
+  async loadLeaflet(){if(window.L&&this._lcss!==undefined)return true;if(this._lp)return this._lp;
+    this._lp=(async()=>{try{
+      const css=await (await fetch("/lottery_pos_static/leaflet/leaflet.css")).text();this._lcss=css.replace(/url\((['"]?)images\//g,"url($1/lottery_pos_static/leaflet/images/");
+      if(!window.L)await new Promise((res,rej)=>{const sc=document.createElement("script");sc.src="/lottery_pos_static/leaflet/leaflet.js";sc.onload=res;sc.onerror=rej;document.head.appendChild(sc)});
+      return !!window.L}catch(e){this._lcss="";return false}})();
+    return this._lp}
+  async mountMap(){const s=this.s,wrap=this.shadowRoot.querySelector("#lmapwrap");if(!wrap)return;
+    const ok=await this.loadLeaflet();if(!this.shadowRoot.querySelector("#lmapwrap"))return;
+    if(!ok){wrap.innerHTML=`<div class="empty">Map library could not be loaded.</div>`;return}
+    if(!this._mapCss){this._mapCss=true;this.render();return}  // first time: re-render so the Leaflet CSS is inside the shadow root
+    const L=window.L;
+    if(!this._mapEl){this._mapEl=document.createElement("div");this._mapEl.style.cssText="height:100%;width:100%";
+      this._map=L.map(this._mapEl,{zoomControl:true,attributionControl:true}).setView([12.52,-69.97],11);
+      L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:19,attribution:"© OpenStreetMap contributors"}).addTo(this._map);
+      this._layer=L.layerGroup().addTo(this._map);
+      this._map.on("click",e=>{const f=this.s.pickFor;if(!f)return;const r=this.shadowRoot,sel=`.rtr[data-id="${f}"]`,la=r.querySelector(sel+" .r-lat"),lo=r.querySelector(sel+" .r-lng");
+        if(la&&lo){la.value=e.latlng.lat.toFixed(6);lo.value=e.latlng.lng.toFixed(6)}this.s.pickFor=null;this._mapEl.style.cursor="";this.toast("Location set - press Save retailer")});
+      this._map.on("popupopen",e=>{const b=e.popup.getElement()?.querySelector(".pop-edit");if(b)b.onclick=()=>{this.s.editRetailer=b.dataset.id;this._map.closePopup();this.render()}});
+      this._fit=true}
+    wrap.appendChild(this._mapEl);
+    this._layer.clearLayers();const pts=[];
+    (s.data.all_retailers||[]).filter(r=>r.lat!=null&&r.lng!=null&&r.lat!==""&&r.lng!=="").forEach(r=>{const on=r.active!==false,ll=[+r.lat,+r.lng];pts.push(ll);
+      const ic=L.divIcon({className:"",html:`<span class="lpin ${on?"on":"off"}">${esc(String(r.number||"").slice(-3))}</span>`,iconSize:[30,30],iconAnchor:[15,15],popupAnchor:[0,-14]});
+      L.marker(ll,{icon:ic,title:r.name}).addTo(this._layer).bindPopup(`<b>#${esc(r.number||"")} ${esc(r.name||"")}</b><br>${esc(r.address||"")}<br>${esc(r.phone||"")}<br><span style="color:${on?"#059669":"#e11d48"}">${on?"Active":"Disabled"}</span> · ${r.has_login?"login: "+esc(r.username):"no login"}<br><button class="pop-edit" data-id="${esc(r.id)}" style="margin-top:6px">Edit retailer</button>`)});
+    setTimeout(()=>{this._map.invalidateSize();if(this._fit&&pts.length){this._map.fitBounds(pts,{padding:[30,30],maxZoom:13});this._fit=false}},60)}
+  retailersMapHTML(retailers){const nOn=retailers.filter(r=>r.active!==false).length,nOff=retailers.length-nOn,nLoc=retailers.filter(r=>r.lat!=null&&r.lat!=="").length;
+    return `<div class="rmap"><h4><ha-icon icon="mdi:map-marker-radius"></ha-icon> Retailer map</h4><div id="lmapwrap" class="lmapwrap"><div class="empty">Loading map…</div></div>
+      <div class="legend"><span><i class="on"></i>Active (${nOn})</span><span><i class="off"></i>Disabled (${nOff})</span><span>${nLoc} of ${retailers.length} placed on the map</span>${this.s.pickFor?`<b style="color:var(--pri)">Click the map to set the location…</b>`:""}</div></div>`}
+  retailersCard(){const s=this.s,d=s.data,openId=s.editRetailer;
+    const list=(d.all_retailers||[]).map(r=>{const open=openId===r.id,person=[r.first_name,r.last_name].filter(Boolean).join(" ");
+      const cs=Number(r.commission_sell??r.commission??10),cr=Number(r.commission_redeem??0);
+      const head=`<button type="button" class="rlist-head" data-a="editret" data-v="${esc(r.id)}"><span class="rnum">#${esc(r.number||"—")}</span>
+        <span class="meta"><b>${esc(r.name||"Retailer")}</b><small>${person?esc(person)+" · ":""}${r.phone?esc(r.phone)+" · ":""}Sell ${cs}% · Redeem ${cr}% · ${r.has_login?"login "+esc(r.username):"no login"}${r.demo?" · demo":""}</small></span>
+        ${r.active!==false?`<span class="st active">Active</span>`:`<span class="st inactive">Disabled</span>`}<ha-icon icon="${open?"mdi:chevron-up":"mdi:chevron-down"}"></ha-icon></button>`;
+      const body=open?`<div class="rlist-body rtr" data-id="${esc(r.id)}"><div class="field-grid">
+        <label>Number <input class="r-num" value="${esc(r.number||"")}" maxlength="20"></label><label>Shop name <input class="r-name" value="${esc(r.name||"")}" maxlength="80"></label>
+        <label>First name <input class="r-fn" value="${esc(r.first_name||"")}" maxlength="60"></label><label>Last name <input class="r-ln" value="${esc(r.last_name||"")}" maxlength="60"></label>
+        <label>Phone <input class="r-ph" value="${esc(r.phone||"")}" maxlength="40"></label>
+        <label>Sell commission % <input class="r-cs" type="number" step="any" min="0" max="100" value="${cs}"></label><label>Redeem commission % <input class="r-cr" type="number" step="any" min="0" max="100" value="${cr}"></label>
+        <label>Active <span style="height:42px;display:flex;align-items:center"><input class="r-act" type="checkbox" ${r.active!==false?"checked":""}></span></label></div>
+        <label class="fl" style="margin-top:8px">Address<input class="r-addr" value="${esc(r.address||"")}" maxlength="200" style="width:100%"></label>
+        <div class="field-grid" style="margin-top:8px"><label>Latitude <input class="r-lat" type="number" step="any" value="${r.lat??""}"></label><label>Longitude <input class="r-lng" type="number" step="any" value="${r.lng??""}"></label>
+          <label>&nbsp;<button type="button" class="ghost" data-a="pickloc" data-v="${esc(r.id)}"><ha-icon icon="mdi:crosshairs-gps"></ha-icon> Pick on map</button></label></div>
+        <h4 style="margin:14px 0 6px">Sell login</h4><div class="field-grid"><label>Username <input class="r-user" value="${esc(r.username||"")}" maxlength="30" autocapitalize="off"></label>
+          <label>&nbsp;<button type="button" class="ghost" data-a="resetpw" data-v="${esc(r.id)}"><ha-icon icon="mdi:key-variant"></ha-icon> ${r.has_login?"Reset password":"Set password"}</button></label></div>
+        <div class="btn-row"><button data-a="saveret" data-v="${esc(r.id)}" style="min-width:140px">Save retailer</button></div></div>`:"";
+      return `<div class="rlist-item ${open?"open":""}">${head}${body}</div>`}).join("")||`<div class="empty">No retailers yet</div>`;
+    return `<div class="card" style="grid-column:1/-1"><div class="glist-toolbar"><h3>Retailers</h3><button type="button" data-a="openaddret"><ha-icon icon="mdi:plus"></ha-icon> Add retailer</button></div>
+      <p class="note">Each retailer signs in to <b>Lottery Sell</b> with its own username and password and only sees its own shop. Green = active, red = disabled (cannot sign in).</p>
+      ${this.retailersMapHTML(d.all_retailers||[])}<div class="rlist">${list}</div></div>`}
+  addRetailerModal(){return `<div class="modal-bg" data-a="closeaddret"><div class="modal" onclick="event.stopPropagation()"><h3>Add retailer</h3><div class="field-grid">
+    <label>Number <input id="rn-num" placeholder="auto" maxlength="20"></label><label>Shop name <input id="rn" maxlength="80"></label>
+    <label>First name <input id="rn-fn" maxlength="60"></label><label>Last name <input id="rn-ln" maxlength="60"></label><label>Phone <input id="rn-ph" maxlength="40"></label>
+    <label>Sell commission % <input id="rn-cs" type="number" value="10" step="any" min="0" max="100"></label><label>Redeem commission % <input id="rn-cr" type="number" value="0" step="any" min="0" max="100"></label>
+    <label>Latitude <input id="rn-lat" type="number" step="any" placeholder="12.52"></label><label>Longitude <input id="rn-lng" type="number" step="any" placeholder="-70.03"></label>
+    <label>Username <input id="rn-user" placeholder="auto: shop+number" maxlength="30" autocapitalize="off"></label><label>Password <input id="rn-pw" placeholder="blank = generate"></label></div>
+    <label class="fl" style="margin-top:10px">Address<input id="rn-addr" maxlength="200" style="width:100%"></label>
+    <div class="modal-actions"><button class="ghost" data-a="closeaddret">Cancel</button><button data-a="addret">Create retailer</button></div></div></div>`}
+
+  /* ---- owner account ---- */
+  accountCard(){const d=this.s.data,me=this.s.me;
+    return `<div class="card"><h3>Owner account</h3><p class="note">Signed in as <b>${esc(me.username)}</b>. Only the owner can open the back office.</p>
+      <div class="row"><label class="fl">Username<input id="ou" value="${esc(d.owner_username||me.username)}" maxlength="30" autocapitalize="off"></label><button data-a="saveowner">Change username</button></div>
+      <div class="row"><button data-a="pwmodal">Change password</button><button class="ghost" data-a="logout">Sign out</button></div>
+      <p class="note">Forgot the password? In Home Assistant run the action <code>lottery_pos.reset_owner_password</code>.</p></div>
+    ${d.demo_logins?`<div class="card"><h3>Demo retailer accounts</h3><p class="note"><b>${d.demo_logins}</b> demo shops can still sign in with the public demo passwords (<code>shop001 / demo001</code> … <code>shop020 / demo020</code>). Remove them before going live.</p>
+      <button class="ghost dng" data-a="rmdemo">Remove demo passwords</button></div>`:""}`}
   print(html){const w=window.open("","_blank","width=380,height=640");if(!w)return this.toast("Allow pop-ups to print",1);w.document.write(html);w.document.close();w.focus();setTimeout(()=>w.print(),300)}
 }
 customElements.define("lottery-pos-panel",LotteryPosPanel);

@@ -1,12 +1,14 @@
 """Persistent data + business logic (sales, results, settlement)."""
 from __future__ import annotations
 
+import asyncio
 import calendar
-import json
-import urllib.request
 import copy
+import json
+import logging
 import re
 import secrets
+import time
 from datetime import date as _date, timedelta
 
 from homeassistant.core import HomeAssistant
@@ -14,8 +16,13 @@ from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
 
-from .const import (DEFAULT_BET_TYPES, DEFAULT_GAMES, DEFAULT_PROMOTIONS, DEFAULT_RETAILERS, DOMAIN,
+from . import auth as authlib
+from . import results_source as rsrc
+from . import schedule as sched
+from .const import (DEFAULT_BET_TYPES, DEFAULT_GAMES, DEFAULT_PROMOTIONS, DEFAULT_RETAILERS, DEMO_LOGINS, DOMAIN,
                     PLAY_WHE_MARKS, SIGNAL_UPDATE, STORAGE_KEY, STORAGE_VERSION, TICKET_DEFAULTS, ZODIAC_SYMBOLS)
+
+_LOGGER = logging.getLogger(__name__)
 
 
 class LotteryError(ValueError):
@@ -27,6 +34,9 @@ class LotteryStore:
         self.hass = hass
         self._store = Store(hass, STORAGE_VERSION, STORAGE_KEY)
         self.data: dict = {}
+        self.auth = authlib.SessionManager()
+        self.initial_owner_password: str | None = None  # set once, when the owner account is first created
+        self._scrape_lock = asyncio.Lock()
 
     async def async_load(self, currency: str = "AWG") -> None:
         data = await self._store.async_load()
@@ -48,7 +58,18 @@ class LotteryStore:
         data["settings"]["ticket"] = {**TICKET_DEFAULTS, **data["settings"].get("ticket", {})}
         data.setdefault("promotions", copy.deepcopy(DEFAULT_PROMOTIONS))
         data.setdefault("promo_codes", {})
+        data.setdefault("holidays", [])
+        data.setdefault("accounts", {})
+        data["settings"].setdefault("advance_days", 30)       # how far ahead tickets can be sold
+        data["settings"].setdefault("auto_results", True)     # fetch published results automatically
+        data["settings"].setdefault("last_fetch", {})
+        for h in data["holidays"]:
+            h.setdefault("games", [])
+            h.setdefault("id", secrets.token_hex(4))
         for g in data["games"]:
+            g.setdefault("one_per_day", False)   # one draw per weekday (midday OR evening)
+            g.setdefault("week_schedule", {})    # {"0": "midday", "1": "evening", ...}
+            g.setdefault("ext_codes", [])        # source result codes: ["CODE", "CODE:session"]
             g.setdefault("open_time", "00:00")
             g.setdefault("enabled", True)
             g.setdefault("bet_types", [])
@@ -121,8 +142,20 @@ class LotteryStore:
             r.setdefault("commission_sell", float(r.get("commission", 10.0)))
             r.setdefault("commission_redeem", 0.0)
             r.setdefault("active", True)
+            r.setdefault("username", "")
+            r.setdefault("pw_hash", "")
+            r.setdefault("must_change", False)
             if not isinstance(r.get("id"), str):
                 r["id"] = str(r["id"])
+            # demo logins for the sample retailers (shop001 / demo001 ...). Only if the shop has no login yet.
+            demo = DEMO_LOGINS.get(r["id"])
+            if demo and not r["username"] and not r["pw_hash"]:
+                r["username"], r["pw_hash"], r["demo"] = demo["username"], demo["pw_hash"], True
+            elif not r["username"] and r.get("number"):
+                # real shop without login: reserve a username, owner sets the password
+                cand = f"shop{r['number']}".lower()
+                if not any(x.get("username") == cand for x in data["retailers"]):
+                    r["username"] = cand
         for p in data["promotions"]:
             p.setdefault("enabled", True)
             if p.get("trigger") == "min_lines":
@@ -145,6 +178,13 @@ class LotteryStore:
             if not isinstance(p.get("id"), str):
                 p["id"] = str(p["id"])
         self.data = data
+        # owner account: created once, random password shown in a persistent notification
+        if "owner" not in data["accounts"]:
+            pw = authlib.generate_password(12)
+            hashed = await self.hass.async_add_executor_job(authlib.hash_password, pw)
+            data["accounts"]["owner"] = {"username": "owner", "pw_hash": hashed, "must_change": True,
+                                         "name": "Lottery owner"}
+            self.initial_owner_password = pw
         self._save()
 
     def _save(self) -> None:
@@ -318,50 +358,40 @@ class LotteryStore:
             max_s = float(game.get("max_stake") or bt.get("max_stake") or 1_000_000)
             if amt < min_s or amt > max_s:
                 raise LotteryError(f"Amount for {game['name']} must be {min_s:g}–{max_s:g}")
-            # Optional same-day session (AM / Midday / Evening …)
+            # ---- draw session + dates: holidays, weekly pattern, one draw per day ----
             sessions = game.get("sessions") or []
             sess_id = str(ln.get("session") or "").strip() or None
-            if sessions:
-                if not sess_id:
-                    # default to first still-open session for the date, else first
-                    now = dt_util.now()
-                    today = now.date().isoformat()
-                    chosen = None
-                    if ln.get("date") == today:
-                        hm = now.strftime("%H:%M")
-                        for s in sessions:
-                            if hm < (s.get("cutoff") or "23:59"):
-                                chosen = s
-                                break
-                    sess_id = (chosen or sessions[0])["id"]
-                self._session(game, sess_id)  # validates
-                line["session"] = sess_id
-                sess = self._session(game, sess_id)
-                line["session_label"] = sess.get("label") or sess_id
-            elif sess_id:
-                raise LotteryError(f"{game['name']} has no draw sessions")
             try:
                 multi = max(1, min(28, int(ln.get("draws") or ln.get("multi_draw") or 1)))
             except (TypeError, ValueError):
                 multi = 1
             base_date = line["date"]
-            dates = self._multi_draw_dates(game, base_date, multi)
-            for d in dates:
+            try:
+                _date.fromisoformat(base_date)
+            except ValueError as err:
+                raise LotteryError("Invalid draw date") from err
+            if sess_id and not sessions:
+                raise LotteryError(f"{game['name']} has no draw sessions")
+            if sess_id:
+                self._session(game, sess_id)  # validates
+            now_ = dt_util.now()
+            horizon = (now_.date() + timedelta(days=int(self.data["settings"].get("advance_days", 30)))).isoformat()
+            for d, sess in self._multi_draws(game, base_date, sess_id, multi):
                 one = dict(line)
                 one["date"] = d
-                try:
-                    wd = _date.fromisoformat(d).weekday()
-                except ValueError as err:
-                    raise LotteryError("Invalid draw date") from err
-                if game.get("draw_days") and wd not in game["draw_days"]:
-                    raise LotteryError(f"{game['name']} has no draw on {calendar.day_name[wd]}")
+                if sess.get("id"):
+                    one["session"] = sess["id"]
+                    one["session_label"] = sess.get("label") or sess["id"]
+                if d > horizon:
+                    raise LotteryError(f"{game['name']}: tickets can be sold up to "
+                                       f"{self.data['settings'].get('advance_days', 30)} days ahead")
                 if self._closed(one):
                     raise LotteryError(f"{game['name']} is closed for {d}")
-                if d == dt_util.now().date().isoformat() and dt_util.now().strftime("%H:%M") < game.get("open_time", "00:00"):
+                if d == now_.date().isoformat() and now_.strftime("%H:%M") < game.get("open_time", "00:00"):
                     raise LotteryError(f"{game['name']} opens at {game['open_time']}")
-                rkey = self._result_key(game["id"], d, line.get("session"))
+                rkey = self._result_key(game["id"], d, one.get("session"))
                 if rkey in self.data["results"]:
-                    label = line.get("session_label") or line.get("session") or ""
+                    label = one.get("session_label") or one.get("session") or ""
                     raise LotteryError(f"{game['name']} {d}{(' ' + label) if label else ''} already drawn")
                 one["draws"] = multi
                 clean.append(one)
@@ -383,24 +413,168 @@ class LotteryStore:
         self.hass.bus.async_fire(f"{DOMAIN}_ticket_sold", {"ticket_id": tid, "retailer_id": retailer["id"], "total": ticket["total"]})
         return self.public(ticket)
 
-    def _multi_draw_dates(self, game: dict, start: str, count: int) -> list[str]:
-        """Next `count` valid draw dates starting at start (inclusive)."""
+    # ---------- draw calendar ----------
+    def holiday(self, d: str, game_id: str | None = None) -> dict | None:
+        return sched.holiday_for(self.data.get("holidays", []), d, game_id)
+
+    def draws_on(self, game: dict, d: str) -> list[dict]:
+        return sched.draws_on(game, d, self.data.get("holidays", []))
+
+    @staticmethod
+    def _ts(d: str, hhmm: str) -> float:
+        from datetime import datetime, time as _time
         try:
-            d0 = _date.fromisoformat(start)
-        except ValueError as err:
-            raise LotteryError("Invalid draw date") from err
-        days = game.get("draw_days") or []
-        out = []
-        cur = d0
-        guard = 0
-        while len(out) < count and guard < 400:
-            guard += 1
-            if not days or cur.weekday() in days:
-                out.append(cur.isoformat())
-            cur = cur + timedelta(days=1)
+            h, m = (int(x) for x in str(hhmm or "00:00").split(":")[:2])
+        except ValueError:
+            h, m = 0, 0
+        return datetime.combine(_date.fromisoformat(d), _time(h, m)).replace(tzinfo=dt_util.DEFAULT_TIME_ZONE).timestamp()
+
+    def _no_draw_msg(self, game: dict, d: str, session_id: str | None = None) -> str:
+        hol = self.holiday(d, game["id"])
+        if hol:
+            return f"{game['name']} has no draw on {d} - {hol.get('name') or 'holiday'} (holiday)"
+        wd = calendar.day_name[_date.fromisoformat(d).weekday()]
+        if session_id:
+            lab = next((x.get("label") for x in game.get("sessions") or [] if x["id"] == session_id), session_id)
+            return f"{game['name']} has no {lab} draw on {wd}"
+        return f"{game['name']} has no draw on {wd}"
+
+    def _default_session(self, game: dict, d: str) -> str | None:
+        """First draw of that day that is still open (else the first one)."""
+        draws = self.draws_on(game, d)
+        if not draws:
+            return None
+        now = dt_util.now()
+        if d == now.date().isoformat():
+            hm = now.strftime("%H:%M")
+            for s in draws:
+                if hm < (s.get("cutoff") or "23:59"):
+                    return s["id"]
+        return draws[0]["id"]
+
+    def _multi_draws(self, game: dict, start: str, session_id: str | None, count: int) -> list[tuple[str, dict]]:
+        """The next ``count`` draws starting on ``start`` (inclusive)."""
+        holidays = self.data.get("holidays", [])
+        first = self.draws_on(game, start)
+        if game.get("one_per_day"):
+            if not first:
+                raise LotteryError(self._no_draw_msg(game, start))
+            if session_id and first[0]["id"] != session_id:
+                raise LotteryError(self._no_draw_msg(game, start, session_id))
+            want = None  # follow the weekly pattern
+        else:
+            want = session_id or (self._default_session(game, start) if game.get("sessions") else None)
+            if not [x for x in first if want is None or x["id"] == want]:
+                raise LotteryError(self._no_draw_msg(game, start, want))
+        out: list[tuple[str, dict]] = []
+        for d, s in sched.next_draws(game, holidays, start, 400):
+            if want is not None and s["id"] != want:
+                continue
+            out.append((d, s))
+            if len(out) >= count:
+                break
         if len(out) < count:
             raise LotteryError("Could not schedule multi-draw dates")
         return out
+
+    def upcoming(self, game: dict, limit: int = 40) -> list[dict]:
+        """Draws still open for sale, soonest first (this is what the sell screen offers).
+
+        A draw is on offer from the moment the previous one has closed, so after
+        today's last cut-off the next midday/evening draw is already on sale.
+        """
+        now = dt_util.now()
+        today = now.date().isoformat()
+        horizon = int(self.data["settings"].get("advance_days", 30))
+        out = []
+        for d, s in sched.next_draws(game, self.data.get("holidays", []), today, horizon):
+            cut_ts = self._ts(d, s.get("cutoff") or "23:59")
+            if cut_ts <= now.timestamp():
+                continue
+            if self._result_key(game["id"], d, s["id"]) in self.data["results"]:
+                continue
+            open_ts = self._ts(d, game.get("open_time") or "00:00") if d == today else 0
+            out.append({"date": d, "session": s["id"], "label": s.get("label") or "",
+                        "draw_time": s.get("draw_time") or "", "cutoff": s.get("cutoff") or "",
+                        "cutoff_ts": cut_ts, "open_ts": open_ts})
+            if len(out) >= limit:
+                break
+        return out
+
+    def year_schedule(self, year: int) -> dict:
+        """Full-year draw calendar for the back office."""
+        if not 2000 <= year <= 2100:
+            raise LotteryError("Year out of range")
+        hol = self.data.get("holidays", [])
+        start = _date(year, 1, 1)
+        days = 366 if calendar.isleap(year) else 365
+        games = []
+        for g in self.data["games"]:
+            if not g.get("enabled", True):
+                continue
+            plan: dict[str, list[str]] = {}
+            for i in range(days):
+                iso = (start + timedelta(days=i)).isoformat()
+                ds = sched.draws_on(g, iso, hol)
+                if ds:
+                    plan[iso] = [x["id"] or "" for x in ds]
+            games.append({"id": g["id"], "name": g["name"], "color": g.get("color", "#64748b"),
+                          "one_per_day": bool(g.get("one_per_day")), "sessions": g.get("sessions") or [],
+                          "draw_time": g.get("draw_time"), "plan": plan})
+        return {"year": year, "games": games,
+                "holidays": sorted((h for h in hol if h["date"].startswith(str(year))), key=lambda h: h["date"])}
+
+    def add_holiday(self, d: str, name: str, games: list[str] | None = None) -> dict:
+        try:
+            _date.fromisoformat(d)
+        except ValueError as err:
+            raise LotteryError("Pick a valid date") from err
+        name = (name or "").strip()[:60]
+        if not name:
+            raise LotteryError("Enter the holiday name")
+        known = {g["id"] for g in self.data["games"]}
+        scope = [x for x in (games or []) if x in known]
+        for h in self.data["holidays"]:
+            if h["date"] == d and sorted(h.get("games") or []) == sorted(scope):
+                raise LotteryError(f"{d} is already a holiday ({h['name']})")
+        h = {"id": secrets.token_hex(4), "date": d, "name": name, "games": scope}
+        self.data["holidays"].append(h)
+        self.data["holidays"].sort(key=lambda x: x["date"])
+        self._save()
+        return {**h, "affected_tickets": self._tickets_on(d, scope)}
+
+    def _tickets_on(self, d: str, scope: list[str]) -> int:
+        """Active tickets that already hold unsettled plays on a date that just became a holiday."""
+        n = 0
+        for t in self.data["tickets"].values():
+            if t["status"] == "active" and any(
+                    l["date"] == d and not l["settled"] and (not scope or l["game"] in scope) for l in t["lines"]):
+                n += 1
+        return n
+
+    def delete_holiday(self, hid: str) -> None:
+        before = len(self.data["holidays"])
+        self.data["holidays"] = [h for h in self.data["holidays"] if h["id"] != hid]
+        if len(self.data["holidays"]) == before:
+            raise LotteryError("Holiday not found")
+        self._save()
+
+    def seed_holidays(self, year: int) -> dict:
+        """Add the Aruba public holidays for ``year`` (existing dates are kept)."""
+        if not 2000 <= year <= 2100:
+            raise LotteryError("Year out of range")
+        added, affected = 0, 0
+        have = {(h["date"], tuple(sorted(h.get("games") or []))) for h in self.data["holidays"]}
+        for h in sched.aruba_holidays(year):
+            if (h["date"], ()) in have:
+                continue
+            self.data["holidays"].append({"id": secrets.token_hex(4), "date": h["date"], "name": h["name"], "games": []})
+            added += 1
+            affected += self._tickets_on(h["date"], [])
+        self.data["holidays"].sort(key=lambda x: x["date"])
+        if added:
+            self._save()
+        return {"added": added, "year": year, "affected_tickets": affected}
 
     def _apply_promotions(self, lines: list[dict]) -> list[dict]:
         """Award promotion codes for every enabled promo whose trigger is met.
@@ -601,26 +775,29 @@ class LotteryStore:
             hits = sum(1 for x in nums if x[-2:] == n)
         return round(ln["amount"] * bt["multiplier"] * int(hits), 2)
 
-    def set_results(self, game: str, d: str, numbers: list[str], session: str | None = None) -> list[dict]:
-        g = self._find("games", "id", game, "game")
-        nums = [str(n).strip() for n in numbers if str(n).strip()]
+    def validate_result_numbers(self, g: dict, nums: list[str]) -> list[str]:
+        """Check winning numbers against the game's format. Returns the cleaned list."""
+        fmt = g.get("format", "digit")
+        nums = [str(n).strip() for n in nums if str(n).strip()]
         if not nums:
             raise LotteryError("Enter at least one result value")
-        sessions = g.get("sessions") or []
-        if sessions:
-            if not session:
-                session = sessions[0]["id"]
-            self._session(g, session)
-        elif session:
-            raise LotteryError(f"{g['name']} has no draw sessions")
-        fmt = g.get("format", "digit")
         if fmt == "digit":
             dig = int(g.get("digits") or 4)
-            if any(not n.isdigit() for n in nums):
-                raise LotteryError("Digit game results must be numbers")
+            if len(nums) > 4:
+                raise LotteryError("A digit game has at most 4 result numbers")
+            for n in nums:
+                if not (n.isdigit() and len(n) == dig):
+                    raise LotteryError(f"{g['name']} results must be exactly {dig} digits (got '{n}')")
         elif fmt == "zodiac":
+            dig = int(g.get("digits") or 2)
             if len(nums) < 2:
                 raise LotteryError("Zodiac results: number then winning symbol id(s)")
+            if not (nums[0].isdigit() and len(nums[0]) == dig):
+                raise LotteryError(f"{g['name']} number must be exactly {dig} digits")
+            known = {z["id"] for z in ZODIAC_SYMBOLS}
+            bad = [x for x in nums[1:] if x not in known]
+            if bad:
+                raise LotteryError(f"Unknown zodiac symbol: {', '.join(bad)}")
         elif fmt == "whe":
             try:
                 n = int(nums[0])
@@ -630,9 +807,41 @@ class LotteryStore:
                 raise LotteryError("Play Whe result must be 1–36")
             nums = [str(n)]
         elif fmt == "jackpot":
-            need = int(g.get("main_count") or 5) + (1 if int(g.get("mega_count") or 0) else 0)
-            if len(nums) < need:
-                raise LotteryError(f"Jackpot results need {need} values (main balls + mega if any)")
+            mc, mx = int(g.get("main_count") or 5), int(g.get("main_max") or 30)
+            mega_n = 1 if int(g.get("mega_count") or 0) else 0
+            if len(nums) != mc + mega_n:
+                raise LotteryError(f"Jackpot results need {mc + mega_n} values ({mc} balls{' + mega' if mega_n else ''})")
+            out = []
+            for i, n in enumerate(nums):
+                lim = int(g.get("mega_max") or 15) if i >= mc else mx
+                if not n.isdigit() or not 1 <= int(n) <= lim:
+                    raise LotteryError(f"Ball {i + 1} must be 01–{lim:02d}")
+                out.append(f"{int(n):02d}")
+            if len(set(out[:mc])) != mc:
+                raise LotteryError("Jackpot balls must be different")
+            nums = out
+        return nums
+
+    def set_results(self, game: str, d: str, numbers: list[str], session: str | None = None,
+                    source: str = "manual") -> list[dict]:
+        g = self._find("games", "id", game, "game")
+        try:
+            _date.fromisoformat(d)
+        except ValueError as err:
+            raise LotteryError("Pick a valid draw date") from err
+        sessions = g.get("sessions") or []
+        if sessions:
+            if not session:
+                session = sessions[0]["id"]
+            self._session(g, session)
+        elif session:
+            raise LotteryError(f"{g['name']} has no draw sessions")
+        nums = self.validate_result_numbers(g, numbers)
+        if source == "manual":
+            # a draw cannot have a result before its sales have closed
+            if d > dt_util.now().date().isoformat() or (
+                    d == dt_util.now().date().isoformat() and dt_util.now().strftime("%H:%M") < self._cutoff_for(g, session)):
+                raise LotteryError("This draw has not closed yet - results can only be entered after the cut-off")
         rkey = self._result_key(game, d, session)
         self.data["results"][rkey] = nums
         winners = []
@@ -650,7 +859,8 @@ class LotteryStore:
                 if t["prize"] > 0:
                     winners.append(t)
         self._save()
-        self.hass.bus.async_fire(f"{DOMAIN}_results", {"game": game, "date": d, "numbers": nums, "session": session})
+        self.hass.bus.async_fire(f"{DOMAIN}_results", {"game": game, "date": d, "numbers": nums, "session": session,
+                                                      "source": source})
         for t in winners:
             self.hass.bus.async_fire(f"{DOMAIN}_winner", {"ticket_id": t["id"], "retailer_id": t["retailer_id"], "prize": t["prize"]})
         return [self.public(t) for t in winners]
@@ -658,13 +868,17 @@ class LotteryStore:
     def draw_results(self, d: str) -> list[dict]:
         out = []
         for g in self.data["games"]:
-            nums = self.data["results"].get(f"{g['id']}|{d}")
-            if nums:
-                out.append({"game": g["name"], "date": d, "numbers": nums})
+            sessions = g.get("sessions") or []
+            keys = [(self._result_key(g["id"], d, x["id"]), x.get("label") or x["id"]) for x in sessions] or \
+                   [(self._result_key(g["id"], d), "")]
+            for key, label in keys:
+                nums = self.data["results"].get(key)
+                if nums:
+                    out.append({"game": g["name"] + (f" {label}" if label else ""), "date": d, "numbers": nums})
         return out
 
     # ---------- reports ----------
-    def report(self, date_from: str, date_to: str) -> dict:
+    def report(self, date_from: str, date_to: str, retailer_id: str | None = None) -> dict:
         money = ("sales", "commission_sell", "commission_redeem", "commission", "prizes", "paid", "unpaid", "net")
         retailers = {r["id"]: r for r in self.data["retailers"]}
         rows = {r["id"]: {
@@ -674,7 +888,7 @@ class LotteryStore:
             "tickets": 0, "lines": 0,
             "sales": 0.0, "commission_sell": 0.0, "commission_redeem": 0.0, "commission": 0.0,
             "prizes": 0.0, "paid": 0.0, "unpaid": 0.0, "net": 0.0,
-        } for r in self.data["retailers"]}
+        } for r in self.data["retailers"] if not retailer_id or r["id"] == retailer_id}
         games = {g["id"]: {"game": g["name"], "tickets": 0, "sales": 0.0, "prizes": 0.0, "net": 0.0} for g in self.data["games"]}
         bts = {b["key"]: b for b in self.data["bet_types"]}
         cancelled, exposure = 0, 0.0
@@ -683,14 +897,15 @@ class LotteryStore:
             if not lines:
                 continue
             if t["status"] == "cancelled":
-                cancelled += 1
+                if not retailer_id or t.get("retailer_id") == retailer_id:
+                    cancelled += 1
                 continue
             rid = t.get("retailer_id")
-            if rid not in rows:
-                continue
-            row, seen = rows[rid], set()
-            row["tickets"] += 1
-            for l in lines:
+            own = rid in rows
+            if own:
+                row, seen = rows[rid], set()
+                row["tickets"] += 1
+            for l in (lines if own else []):
                 row["lines"] += 1
                 row["sales"] += l["amount"]
                 row["prizes"] += l["prize"]
@@ -706,7 +921,7 @@ class LotteryStore:
                 if not l["settled"] and l["bet_type"] in bts:
                     bt = bts[l["bet_type"]]
                     exposure += l["amount"] * bt["multiplier"] * (3 if bt["mode"] == "chances" else 1)
-            # redeem commission credited to the shop that paid out
+            # redeem commission credited to the shop that paid out (also for other shops' tickets)
             if t["status"] == "redeemed" and t.get("prize"):
                 pay_rid = t.get("redeemed_by") or rid
                 if pay_rid in rows:
@@ -738,20 +953,25 @@ class LotteryStore:
         retailers = {r["id"]: r["name"] for r in self.data["retailers"]}
         live = [t for t in self.data["tickets"].values() if t["status"] != "cancelled"]
         draws = []
+        glookup = {g["id"]: g for g in self.data["games"]}
         for key, nums in self.data["results"].items():
-            gid, d = key.split("|")
+            parts = key.split("|")
+            gid, d = parts[0], parts[1]
+            sess = parts[2] if len(parts) > 2 else None
             if not date_from <= d <= date_to:
                 continue
             played, won, sales, prizes = set(), set(), 0.0, 0.0
             for t in live:
                 for l in t["lines"]:
-                    if l["game"] == gid and l["date"] == d:
+                    if l["game"] == gid and l["date"] == d and (l.get("session") or None) == sess:
                         played.add(t["id"])
                         sales += l["amount"]
                         if l["prize"] > 0:
                             won.add(t["id"])
                             prizes += l["prize"]
-            draws.append({"game": gid, "game_name": names.get(gid, gid), "date": d, "numbers": nums, "tickets": len(played),
+            slabel = next((x.get("label") for x in (glookup.get(gid, {}).get("sessions") or []) if x["id"] == sess), sess)
+            draws.append({"game": gid, "game_name": names.get(gid, gid) + (f" {slabel}" if slabel else ""),
+                          "session": sess or "", "date": d, "numbers": nums, "tickets": len(played),
                           "sales": round(sales, 2), "winners": len(won), "prizes": round(prizes, 2)})
         draws.sort(key=lambda x: (x["date"], x["game_name"]), reverse=True)
         winners, paid, unpaid = [], 0.0, 0.0
@@ -771,11 +991,13 @@ class LotteryStore:
         return {"draws": draws, "winners": winners, "totals": {"winners": len(winners), "prizes": round(paid + unpaid, 2),
                                                                 "paid": round(paid, 2), "unpaid": round(unpaid, 2)}}
 
-    def summary(self) -> dict:
+    def summary(self, retailer_id: str | None = None) -> dict:
         today = dt_util.now().date().isoformat()
         sales, count, liability = 0.0, 0, 0.0
         for t in self.data["tickets"].values():
             if t["status"] == "cancelled":
+                continue
+            if retailer_id and t.get("retailer_id") != retailer_id:
                 continue
             if t["created"][:10] == today:
                 sales, count = sales + t["total"], count + 1
@@ -1140,19 +1362,50 @@ class LotteryStore:
         out["commission_redeem"] = round(cr, 2)
         out["commission"] = out["commission_sell"]  # legacy field
         out["active"] = bool(f.get("active", out.get("active", True)))
+        for k, lo, hi in (("lat", -90.0, 90.0), ("lng", -180.0, 180.0)):
+            if k in f:
+                v = f[k]
+                if v in (None, ""):
+                    out.pop(k, None)
+                else:
+                    try:
+                        v = round(float(v), 6)
+                    except (TypeError, ValueError) as err:
+                        raise LotteryError(f"Invalid {k}") from err
+                    if not lo <= v <= hi:
+                        raise LotteryError(f"{k} must be {lo:g} to {hi:g}")
+                    out[k] = v
+        if "username" in f:
+            out["username"] = self._clean_username(f.get("username"), exclude=out.get("id"))
         return out
+
+    def _clean_username(self, raw, exclude: str | None = None) -> str:
+        u = str(raw or "").strip().lower()
+        if not u:
+            return ""
+        if not re.fullmatch(r"[a-z0-9._-]{3,30}", u):
+            raise LotteryError("Username: 3–30 letters, digits, dot, dash or underscore")
+        if u == self.data["accounts"].get("owner", {}).get("username"):
+            raise LotteryError("That username is reserved")
+        for r in self.data["retailers"]:
+            if r.get("username") == u and r["id"] != exclude:
+                raise LotteryError(f"Username '{u}' is already used by {r.get('name')}")
+        return u
 
     def update_retailer(self, rid: str, fields: dict) -> dict:
         r = self._find("retailers", "id", rid, "retailer")
-        updated = self._normalize_retailer_fields(fields, r)
+        updated = self._normalize_retailer_fields({**fields, "id": rid}, {**r, "id": rid})
         # unique retailer number if set
         num = updated.get("number") or ""
         if num and any(x.get("number") == num and x["id"] != rid for x in self.data["retailers"]):
             raise LotteryError(f"Retailer number {num} already in use")
+        was_active = r.get("active", True)
         r.clear()
-        r.update({"id": rid, **updated})
+        r.update({**updated, "id": rid})
+        if was_active and not r.get("active", True):
+            self.auth.revoke_subject("retailer", rid)  # disabling a shop signs it out
         self._save()
-        return r
+        return self.public_retailer(r)
 
     def set_branding(self, name: str, logo: str, operator: str = "", tagline: str = "",
                      license_text: str = "") -> dict:
@@ -1173,7 +1426,7 @@ class LotteryStore:
         self._save()
         return self.data["settings"]
 
-    def add_retailer(self, fields: dict) -> dict:
+    def add_retailer(self, fields: dict, pw_hash: str = "") -> dict:
         fields = self._normalize_retailer_fields(fields, None)
         base = re.sub(r"\W+", "_", fields["name"].lower()).strip("_") or secrets.token_hex(3)
         rid = base
@@ -1189,10 +1442,110 @@ class LotteryStore:
             fields["number"] = f"{n:03d}"
         elif any(r.get("number") == num for r in self.data["retailers"]):
             raise LotteryError(f"Retailer number {num} already in use")
-        r = {"id": rid, **fields}
+        if not fields.get("username"):
+            fields["username"] = self._clean_username(f"shop{fields['number']}")
+        r = {"id": rid, **fields, "pw_hash": pw_hash, "must_change": bool(pw_hash)}
         self.data["retailers"].append(r)
         self._save()
-        return r
+        return self.public_retailer(r)
+
+    # ---------- accounts / login ----------
+    @staticmethod
+    def public_retailer(r: dict) -> dict:
+        """Retailer record that is safe to send to a browser (never the password hash)."""
+        out = {k: v for k, v in r.items() if k != "pw_hash"}
+        out["has_login"] = bool(r.get("pw_hash") and r.get("username"))
+        return out
+
+    def find_account(self, username: str, mode: str) -> dict | None:
+        """Account for a login attempt. ``mode`` 'office' -> owner, 'sell' -> retailers."""
+        u = str(username or "").strip().lower()
+        if not u:
+            return None
+        if mode == "office":
+            o = self.data["accounts"].get("owner")
+            if o and o.get("username") == u:
+                return {"role": "owner", "subject": "owner", "username": u, "name": o.get("name", "Owner"),
+                        "pw_hash": o.get("pw_hash", ""), "must_change": bool(o.get("must_change"))}
+            return None
+        for r in self.data["retailers"]:
+            if r.get("username") == u and r.get("pw_hash"):
+                return {"role": "retailer", "subject": r["id"], "username": u, "name": r.get("name", u),
+                        "pw_hash": r["pw_hash"], "must_change": bool(r.get("must_change")),
+                        "active": r.get("active", True)}
+        return None
+
+    def set_password_hash(self, role: str, subject: str, pw_hash: str, must_change: bool = False) -> None:
+        if role == "owner":
+            acct = self.data["accounts"]["owner"]
+            acct["pw_hash"], acct["must_change"] = pw_hash, must_change
+        else:
+            r = self._find("retailers", "id", subject, "retailer")
+            r["pw_hash"], r["must_change"] = pw_hash, must_change
+            r.pop("demo", None)  # a changed password is no longer the public demo one
+        self.auth.revoke_subject(role, subject)
+        self._save()
+
+    def current_hash(self, role: str, subject: str) -> str:
+        if role == "owner":
+            return self.data["accounts"]["owner"].get("pw_hash", "")
+        return self._find("retailers", "id", subject, "retailer").get("pw_hash", "")
+
+    def set_owner_username(self, username: str) -> None:
+        u = str(username or "").strip().lower()
+        if not re.fullmatch(r"[a-z0-9._-]{3,30}", u):
+            raise LotteryError("Username: 3–30 letters, digits, dot, dash or underscore")
+        if any(r.get("username") == u for r in self.data["retailers"]):
+            raise LotteryError("That username belongs to a retailer")
+        self.data["accounts"]["owner"]["username"] = u
+        self._save()
+
+    def set_retailer_username(self, rid: str, username: str) -> dict:
+        r = self._find("retailers", "id", rid, "retailer")
+        r["username"] = self._clean_username(username, exclude=rid)
+        self.auth.revoke_subject("retailer", rid)
+        self._save()
+        return self.public_retailer(r)
+
+    def remove_demo_logins(self) -> int:
+        n = 0
+        for r in self.data["retailers"]:
+            if r.get("demo"):
+                r["pw_hash"], r["demo"] = "", False
+                self.auth.revoke_subject("retailer", r["id"])
+                n += 1
+        if n:
+            self._save()
+        return n
+
+    # ---------- state for the browser, per role ----------
+    def state_for(self, role: str, retailer_id: str | None = None) -> dict:
+        d = self.data
+        now = dt_util.now()
+        all_games = d["games"]
+        enabled = [g for g in all_games if g.get("enabled", True)]
+        base = {"games": enabled, "all_games": all_games,
+                "bet_types": [b for b in d["bet_types"] if b.get("enabled", True)], "all_bet_types": d["bet_types"],
+                "currency": d["currency"], "settings": d["settings"], "zodiac_symbols": ZODIAC_SYMBOLS,
+                "play_whe_marks": PLAY_WHE_MARKS, "holidays": d.get("holidays", []),
+                "upcoming": {g["id"]: self.upcoming(g) for g in enabled},
+                "today_holiday": {g["id"]: h["name"] for g in enabled
+                                  if (h := self.holiday(now.date().isoformat(), g["id"]))},
+                "server_ts": now.timestamp(), "server_date": now.date().isoformat()}
+        if role == "retailer":
+            me = next((r for r in d["retailers"] if r["id"] == retailer_id), None)
+            mine = [self.public_retailer(me)] if me else []
+            base.update({"retailers": mine, "all_retailers": mine, "promotions": [],
+                         "summary": self.summary(retailer_id), "me": mine[0] if mine else None})
+            # a retailer needs the ticket design/ticker but not internal tooling
+            base["settings"] = {k: v for k, v in d["settings"].items() if k not in ("last_fetch",)}
+        else:
+            pubs = [self.public_retailer(r) for r in d["retailers"]]
+            base.update({"retailers": [r for r in pubs if r.get("active", True)], "all_retailers": pubs,
+                         "promotions": d.get("promotions", []), "summary": self.summary(),
+                         "owner_username": d["accounts"]["owner"].get("username", "owner"),
+                         "demo_logins": sum(1 for r in d["retailers"] if r.get("demo"))})
+        return base
 
     def set_ticker(self, text: str, enabled: bool, speed: int, color: str,
                    messages: list | None = None) -> dict:
@@ -1223,229 +1576,154 @@ class LotteryStore:
         return self.data["settings"]["ticker"]
 
 
-    # ---------- external results scrape (indioslottery.com) ----------
+    # ---------- published results import (indioslottery.com public API) ----------
     INDIOS_SUPABASE = "https://sswbmocnjkuwoyqqpgsk.supabase.co"
     INDIOS_ANON_KEY = (
         "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9."
         "eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNzd2Jtb2Nuamt1d295cXFwZ3NrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTU2NTQ5NjMsImV4cCI6MjA3MTIzMDk2M30."
         "PSZMQgLihW_ZnEaW9ynCINWvvFl9skaOwWW92TWHzL8"
     )
-    # site game_code → possible local game name/id fragments
-    INDIOS_ALIASES = {
-        "DIARIO": ["diario"],
-        "CORSOW": ["corsow", "korsow", "korsou", "wnk"],
-        "KORSOW": ["corsow", "korsow", "korsou", "wnk"],
-        "FLAMINGO": ["flamingo"],
-        "SUPER4": ["super4", "super 4", "super-4"],
-        "PHILIPSBURG_AM": ["philipsburg am", "philb_am", "philb am", "phlp am"],
-        "PHILIPSBURG_PM": ["philipsburg pm", "philb_pm", "philb pm", "phlp pm", "philipsburg evening"],
-        "BIG4": ["big 4", "big4"],
-        "CATOCHI": ["catochi"],
-        "LUCKY3": ["lucky 3", "lucky3"],
-        "ONEOFF": ["1 off", "1-off", "oneoff", "one off"],
-        "ZODIAC": ["zodiac"],
-        "LOTTO_DIA": ["lotto di dia", "lottodidia", "lotto dia"],
-        "LOTTO5": ["lotto 5", "lotto5"],
-        "MINI_MEGA": ["mini mega", "minimega"],
-        "MINIMEGA": ["mini mega", "minimega"],
-        "MEGAPLUS": ["mega plus", "megaplus"],
-        "MEGA_PLUS": ["mega plus", "megaplus"],
-    }
 
-    def _indios_fetch(self, path: str) -> list:
+    async def _fetch_rows(self, path: str) -> list:
+        """GET one source view. Retries network errors / 5xx; 4xx fails at once with its reason."""
+        import aiohttp
+        from homeassistant.helpers.aiohttp_client import async_get_clientsession
+
         url = f"{self.INDIOS_SUPABASE}/rest/v1/{path}"
-        req = urllib.request.Request(
-            url,
-            headers={
-                "User-Agent": "LotteryPOS/1.0",
-                "apikey": self.INDIOS_ANON_KEY,
-                "Authorization": f"Bearer {self.INDIOS_ANON_KEY}",
-                "Accept": "application/json",
-            },
-        )
-        with urllib.request.urlopen(req, timeout=25) as resp:
-            data = json.loads(resp.read().decode("utf-8", errors="ignore"))
-        return data if isinstance(data, list) else []
+        headers = {"User-Agent": "LotteryPOS/0.10", "apikey": self.INDIOS_ANON_KEY,
+                   "Authorization": f"Bearer {self.INDIOS_ANON_KEY}", "Accept": "application/json"}
+        session = async_get_clientsession(self.hass)
+        last = "unknown error"
+        for attempt in range(3):
+            try:
+                async with session.get(url, headers=headers, timeout=aiohttp.ClientTimeout(total=20)) as resp:
+                    if resp.status in (401, 403):
+                        raise LotteryError(f"source refused access (HTTP {resp.status})")
+                    if 400 <= resp.status < 500 and resp.status != 429:
+                        raise LotteryError(f"source rejected the request (HTTP {resp.status})")
+                    if resp.status != 200:
+                        last = f"HTTP {resp.status}"
+                    else:
+                        data = await resp.json(content_type=None)
+                        return data if isinstance(data, list) else []
+            except LotteryError:
+                raise
+            except Exception as err:  # network, timeout, bad JSON
+                last = f"{type(err).__name__}: {err}" if str(err) else type(err).__name__
+            await asyncio.sleep(1.5 * (attempt + 1))
+        raise LotteryError(last)
 
-    def _match_local_game(self, code: str, period: str | None = None):
-        """Match Indios game_code (+ optional midday/evening) to a local game."""
-        code_u = (code or "").upper().strip()
-        aliases = list(self.INDIOS_ALIASES.get(code_u, []))
-        aliases.append(code_u.lower().replace("_", " "))
-        aliases.append(code_u.lower().replace("_", ""))
-        if period:
-            p = period.lower()
-            extra = []
-            for a in aliases:
-                if p in ("midday", "merdia"):
-                    extra += [f"{a} merdia", f"{a} midday", f"{a} am"]
-                elif p in ("evening", "anochi"):
-                    extra += [f"{a} anochi", f"{a} evening", f"{a} pm"]
-            aliases = extra + aliases
-        # exact id / name
+    def pending_draws(self, days: int = 2) -> list[tuple[dict, str, dict]]:
+        """Draws of the last ``days`` days whose sales closed but that still have no result."""
+        now = dt_util.now()
+        start = (now.date() - timedelta(days=days)).isoformat()
+        out = []
         for g in self.data["games"]:
-            gname = g["name"].lower().strip()
-            gid = g["id"].lower().strip()
-            for a in aliases:
-                a = a.lower()
-                if gid == a or gname == a or a in gname or gname in a:
-                    return g
-        return None
-
-    def _nums_from_indios_row(self, row: dict, period_style: bool) -> tuple[str, list[str]]:
-        """Return (draw_date, numbers list) from a Supabase row."""
-        draw_date = str(row.get("draw_date") or dt_util.now().date().isoformat())[:10]
-        if not period_style:
-            # v_our_latest: first/second/third/skina
-            nums = []
-            for k in ("first_prize", "second_prize", "third_prize", "skina4_prize"):
-                v = row.get(k)
-                if v is None or v == "":
-                    continue
-                s = str(v).strip()
-                if s.isdigit():
-                    nums.append(s.zfill(4) if len(s) <= 4 else s)
-            return draw_date, nums
-        # v_lotto_latest
-        raw = row.get("numbers")
-        if isinstance(raw, str):
-            try:
-                raw = json.loads(raw)
-            except Exception:
-                raw = []
-        if not isinstance(raw, list):
-            raw = []
-        extra = row.get("extra") or {}
-        if isinstance(extra, str):
-            try:
-                extra = json.loads(extra)
-            except Exception:
-                extra = {}
-        code = str(row.get("game_code") or "").upper()
-        nums: list[str] = []
-        if code in ("LOTTO_DIA", "LOTTO5", "MINI_MEGA", "MINIMEGA"):
-            for x in raw:
-                s = str(x).strip()
-                if s.isdigit():
-                    nums.append(s.zfill(2))
-            joker = extra.get("joker") or extra.get("mega") or extra.get("mega_ball")
-            if joker is not None and str(joker).strip() != "":
-                nums.append(str(joker).strip().zfill(2))
-        elif code == "ZODIAC":
-            # digits + sign
-            digits = "".join(str(x) for x in raw)
-            nums.append(digits)
-            sign = str(extra.get("sign") or "").lower().strip()
-            # map spanish/english signs to our zodiac ids when possible
-            sign_map = {
-                "aries": "aries", "tauro": "taurus", "taurus": "taurus",
-                "geminis": "gemini", "gemini": "gemini", "cancer": "cancer",
-                "leo": "leo", "virgo": "virgo", "libra": "libra",
-                "escorpio": "scorpio", "scorpio": "scorpio",
-                "sagitario": "sagittarius", "sagittarius": "sagittarius",
-                "capricornio": "capricorn", "capricorn": "capricorn",
-                "acuario": "aquarius", "aquarius": "aquarius",
-                "piscis": "pisces", "pisces": "pisces",
-                "rat": "rat", "ox": "ox", "tiger": "tiger", "rabbit": "rabbit",
-                "dragon": "dragon", "snake": "snake", "horse": "horse",
-                "goat": "goat", "monkey": "monkey", "rooster": "rooster",
-                "dog": "dog", "pig": "pig",
-            }
-            if sign:
-                nums.append(sign_map.get(sign, sign))
-        else:
-            # digit games: join into one number string(s)
-            if all(str(x).isdigit() and len(str(x)) == 1 for x in raw):
-                nums.append("".join(str(x) for x in raw))
-            else:
-                for x in raw:
-                    s = str(x).strip()
-                    if s:
-                        nums.append(s)
-        return draw_date, nums
-
-    def scrape_indios(self, url: str = "https://indioslottery.com/") -> dict:
-        """Pull latest results from indioslottery.com (Supabase public API) and settle matching games."""
-        imported, skipped, winners_all = [], [], []
-        try:
-            our = self._indios_fetch("v_our_latest?select=*")
-            midday = self._indios_fetch("v_lotto_latest?select=*&period=eq.midday")
-            evening = self._indios_fetch("v_lotto_latest?select=*&period=eq.evening")
-        except Exception as err:
-            raise LotteryError(f"Could not fetch Indios results: {err}") from err
-
-        rows = []
-        for r in our:
-            rows.append((r, False, None))
-        for r in midday:
-            rows.append((r, True, "midday"))
-        for r in evening:
-            rows.append((r, True, "evening"))
-
-        dates = set()
-        for row, period_style, period in rows:
-            code = str(row.get("game_code") or "").strip()
-            if not code:
-                skipped.append({"name": "?", "reason": "missing game_code"})
+            if not g.get("enabled", True):
                 continue
-            label = code + (f" ({period})" if period else "")
-            draw_date, nums = self._nums_from_indios_row(row, period_style)
-            if not nums:
-                skipped.append({"name": label, "reason": "no numbers"})
+            for d, s in sched.next_draws(g, self.data.get("holidays", []), start, days):
+                if self._ts(d, s.get("cutoff") or "23:59") <= now.timestamp() and \
+                        self._result_key(g["id"], d, s["id"]) not in self.data["results"]:
+                    out.append((g, d, s))
+        return out
+
+    async def async_scrape(self, url: str | None = None, auto: bool = False) -> dict:
+        """Fetch published results and settle tickets. Runs entirely on the event loop."""
+        if self._scrape_lock.locked():
+            raise LotteryError("A results import is already running")
+        async with self._scrape_lock:
+            return await self._scrape()
+
+    async def _scrape(self) -> dict:
+        errors: list[str] = []
+        specs = [("our", "v_our_latest?select=*", None),
+                 ("lotto", "v_lotto_latest?select=*&period=eq.midday", "midday"),
+                 ("lotto", "v_lotto_latest?select=*&period=eq.evening", "evening")]
+        got = await asyncio.gather(*(self._fetch_rows(p) for _, p, _ in specs), return_exceptions=True)
+        records: list[dict] = []
+        lotto_ok = 0
+        for (kind, path, period), res in zip(specs, got):
+            label = path.split("?")[0] + (f" ({period})" if period else "")
+            if isinstance(res, Exception):
+                errors.append(f"{label}: {res}")
                 continue
-            game = self._match_local_game(code, period)
-            if not game:
-                skipped.append({"name": label, "reason": "no matching local game"})
-                continue
+            if kind == "lotto" and res:
+                lotto_ok += 1
+            for row in res:
+                rec = rsrc.parse_row(row, kind, period)
+                if rec:
+                    records.append(rec)
+        if not lotto_ok:
+            # the period filter may be unsupported - read the view unfiltered; each row says its own period
             try:
-                winners = self.set_results(game["id"], draw_date, nums)
+                for row in await self._fetch_rows("v_lotto_latest?select=*"):
+                    rec = rsrc.parse_row(row, "lotto", None)
+                    if rec:
+                        records.append(rec)
             except LotteryError as err:
-                skipped.append({"name": label, "reason": str(err)})
-                continue
-            dates.add(draw_date)
-            imported.append({
-                "game": game["name"], "game_id": game["id"], "date": draw_date,
-                "numbers": nums, "winners": len(winners), "source_code": code,
-            })
-            winners_all.extend(winners)
+                errors.append(f"v_lotto_latest: {err}")
 
-        # also try to update jackpot pools from extra.jackpot when present
-        for row, period_style, period in rows:
-            if not period_style:
+        today = dt_util.now().date().isoformat()
+        imported, skipped, unchanged, winners_all, seen = [], [], [], [], set()
+        games = self.data["games"]
+        for rec in records:
+            label = rec["code"] + (f" ({rec['period']})" if rec.get("period") else "")
+            ident = (rec["code"], rec.get("period"), rec.get("date"))
+            if ident in seen:
                 continue
-            extra = row.get("extra") or {}
-            if isinstance(extra, str):
-                try:
-                    extra = json.loads(extra)
-                except Exception:
-                    extra = {}
-            jp = extra.get("jackpot")
-            if not jp:
+            seen.add(ident)
+            if not rec["numbers"]:
+                skipped.append({"name": label, "reason": "no numbers published yet"})
                 continue
-            game = self._match_local_game(str(row.get("game_code") or ""), period)
-            if not game or game.get("format") != "jackpot":
+            game, sess, err = rsrc.match_game(games, rec["code"], rec.get("period"))
+            if err or not game:
+                skipped.append({"name": label, "reason": err or "no matching local game"})
+                continue
+            d = rec.get("date") or today
+            if d > today:
+                skipped.append({"name": label, "reason": f"result dated in the future ({d})"})
                 continue
             try:
-                # European-style thousand separator: 450.000 → 450000
-                val = float(str(jp).replace(".", "").replace(",", ""))
-                game["jackpot_current"] = val
-            except (TypeError, ValueError):
-                pass
-        if any(r[1] for r in rows):
-            self._save()
+                nums = self.validate_result_numbers(game, rsrc.fit_numbers(game, rec["numbers"]))
+            except LotteryError as e:
+                skipped.append({"name": label, "reason": str(e)})
+                continue
+            rkey = self._result_key(game["id"], d, sess)
+            old = self.data["results"].get(rkey)
+            if old:
+                if list(old) == nums:
+                    unchanged.append({"game": game["name"], "date": d, "session": sess or ""})
+                else:
+                    skipped.append({"name": label, "reason": f"{game['name']} {d} already has different numbers "
+                                                           f"({', '.join(old)}) - kept; edit manually to change"})
+                continue
+            try:
+                winners = self.set_results(game["id"], d, nums, sess, source="scrape")
+            except LotteryError as e:
+                skipped.append({"name": label, "reason": str(e)})
+                continue
+            imported.append({"game": game["name"], "game_id": game["id"], "date": d, "session": sess or "",
+                             "numbers": nums, "winners": len(winners), "source_code": rec["code"],
+                             "date_assumed": bool(rec.get("date_assumed"))})
+            winners_all.extend(winners)
+            jp = rec.get("jackpot")
+            if jp and game.get("format") == "jackpot":
+                try:  # European thousands separator: 450.000 -> 450000
+                    game["jackpot_current"] = float(str(jp).replace(".", "").replace(",", ""))
+                except ValueError:
+                    pass
+        if not records and errors:
+            self._set_last_fetch(0, 0, errors)
+            raise LotteryError("Could not reach the results source: " + "; ".join(errors))
+        self._set_last_fetch(len(imported), len(skipped), errors)
+        return {"source": "indioslottery.com", "date": max((i["date"] for i in imported), default=today),
+                "checked": len(records), "imported": imported, "skipped": skipped, "unchanged": unchanged,
+                "errors": errors, "winners": [w for w in winners_all]}
 
-        return {
-            "source": url or "https://indioslottery.com/",
-            "date": sorted(dates)[-1] if dates else dt_util.now().date().isoformat(),
-            "imported": imported,
-            "skipped": skipped,
-            "winners": [self.public(w) if isinstance(w, dict) and "id" in w else w for w in winners_all],
-        }
-
-    # backward-compatible alias
-    def scrape_joeblack(self, url: str = "https://indioslottery.com/") -> dict:
-        return self.scrape_indios(url)
-
+    def _set_last_fetch(self, imported: int, skipped: int, errors: list[str]) -> None:
+        self.data["settings"]["last_fetch"] = {"at": dt_util.now().isoformat(timespec="seconds"),
+                                               "imported": imported, "skipped": skipped, "errors": errors[:5]}
+        self._save()
 
     def update_game(self, gid: str, f: dict) -> dict:
         g = self._find("games", "id", gid, "game")
@@ -1515,6 +1793,39 @@ class LotteryStore:
                 # keep top-level draw_time/cutoff as first session for compatibility
                 new["draw_time"] = cleaned[0]["draw_time"]
                 new["cutoff"] = cleaned[0]["cutoff"]
+        if "ext_codes" in f:
+            codes: list[str] = []
+            for c in f.get("ext_codes") or []:
+                c = str(c).strip()
+                if not c:
+                    continue
+                if not re.fullmatch(r"[A-Za-z0-9_\- ]{1,40}(:[a-z0-9_]{1,20})?", c):
+                    raise LotteryError(f"Result code '{c}' is not valid (use CODE or CODE:session)")
+                if c not in codes:
+                    codes.append(c)
+            new["ext_codes"] = codes
+        if "one_per_day" in f:
+            new["one_per_day"] = bool(f["one_per_day"])
+        if new.get("one_per_day") and len(new.get("sessions") or []) < 2:
+            # a game that picks midday OR evening per weekday needs both draws defined
+            have = list(new.get("sessions") or [])
+            ids = {x["id"] for x in have}
+            if "midday" not in ids:
+                have.insert(0, {"id": "midday", "label": "Midday", "draw_time": "13:00", "cutoff": "12:45"})
+            if "evening" not in ids:
+                have.append({"id": "evening", "label": "Evening", "draw_time": "19:00", "cutoff": "18:45"})
+            new["sessions"] = have
+        if "week_schedule" in f or ("one_per_day" in f and new.get("one_per_day")) or "sessions" in f:
+            if new.get("one_per_day"):
+                raw = f["week_schedule"] if "week_schedule" in f else (new.get("week_schedule") or {})
+                if not raw and new.get("sessions"):
+                    raw = {str(i): new["sessions"][0]["id"] for i in range(7)}
+                try:
+                    new["week_schedule"] = sched.validate_week_schedule(raw or {}, new.get("sessions") or [])
+                except ValueError as err:
+                    raise LotteryError(str(err)) from err
+            elif "week_schedule" in f:
+                new["week_schedule"] = {}
         for k in ("min_stake", "max_stake", "jackpot_min", "jackpot_current", "jackpot_contrib"):
             if k in f:
                 try:
@@ -1630,9 +1941,10 @@ class LotteryStore:
             "jackpot_contrib": float(fields.get("jackpot_contrib") or 0.2),
             "jackpot_prizes": list(fields.get("jackpot_prizes") or []),
             "fixed_prices": list(fields.get("fixed_prices") or [2, 3, 4, 5]),
+            "one_per_day": False, "week_schedule": {}, "ext_codes": [], "sessions": [],
         }
-        if g["format"] not in ("digit", "zodiac", "jackpot"):
-            raise LotteryError("Format must be digit, zodiac or jackpot")
+        if g["format"] not in ("digit", "zodiac", "jackpot", "whe"):
+            raise LotteryError("Format must be digit, zodiac, jackpot or whe")
         if not 1 <= g["digits"] <= 6:
             raise LotteryError("Digits must be 1–6")
         if not 1 <= g["main_count"] <= 10 or not 5 <= g["main_max"] <= 99:

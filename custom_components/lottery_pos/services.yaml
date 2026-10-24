@@ -27,3 +27,22 @@ add_game:
     draw_time: {example: "13:00", selector: {text: {}}}
     cutoff: {example: "12:45", selector: {text: {}}}
     logo: {example: /local/lottery/diario.png, selector: {text: {}}}
+
+fetch_results:
+  name: Fetch published results
+  description: Import the latest published winning numbers and settle tickets now (this also runs automatically every 10 minutes while results are missing).
+
+reset_owner_password:
+  name: Reset owner password
+  description: Set the back office owner password (recovery). Administrators only.
+  fields:
+    password:
+      name: New password
+      required: true
+      example: "choose-a-long-password"
+      selector:
+        text:
+    username:
+      name: New username (optional)
+      selector:
+        text:
